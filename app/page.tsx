@@ -79,7 +79,7 @@ const pricingPlans = [
     ],
     cta: "Get Started Free",
     highlight: false,
-    plan: null,
+    plan: "starter",
   },
   {
     name: "Growth",
@@ -114,23 +114,31 @@ const pricingPlans = [
       "Dedicated support",
       "White-label option",
     ],
-    cta: "Subscribe Now",
+    cta: "Get Started",
     highlight: false,
     plan: "scale",
   },
+  {
+    name: "Enterprise",
+    price: "Custom",
+    period: "",
+    description: "Tailored solutions for large organizations",
+    features: [
+      "Everything in Scale",
+      "Dedicated infrastructure",
+      "Custom AI agent training",
+      "SLA & uptime guarantee",
+      "SSO & advanced security",
+      "On-premise deployment option",
+      "Custom API integrations",
+      "Dedicated account manager",
+      "Volume email negotiation",
+    ],
+    cta: "Contact Sales",
+    highlight: false,
+    plan: "enterprise",
+  },
 ];
-
-async function handleCheckout(plan: string) {
-  const res = await fetch("/api/checkout", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ plan }),
-  });
-  const data = await res.json();
-  if (data.url) {
-    window.location.href = data.url;
-  }
-}
 
 export default function Home() {
   return (
@@ -168,6 +176,12 @@ export default function Home() {
                 Pricing
               </a>
               <a
+                href="/dashboard"
+                className="hover:text-primary transition-colors"
+              >
+                Dashboard
+              </a>
+              <a
                 href="#signup"
                 className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary-dark transition-colors"
               >
@@ -196,7 +210,7 @@ export default function Home() {
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <a
-                href="#signup"
+                href="/auth/login"
                 className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors"
               >
                 Start Free
@@ -391,7 +405,7 @@ export default function Home() {
                 anytime.
               </p>
             </div>
-            <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
               {pricingPlans.map((plan) => (
                 <div
                   key={plan.name}
@@ -446,11 +460,9 @@ export default function Home() {
                   </ul>
                   <button
                     onClick={() =>
-                      plan.plan
-                        ? handleCheckout(plan.plan)
-                        : document
-                            .getElementById("signup")
-                            ?.scrollIntoView({ behavior: "smooth" })
+                      plan.plan === "enterprise"
+                        ? window.location.href = "mailto:jay.lin@jytech.us?subject=AutoClaw Enterprise Plan Inquiry"
+                        : window.location.href = "/auth/login"
                     }
                     className={`block w-full text-center py-3 rounded-lg font-medium transition-colors cursor-pointer ${
                       plan.highlight
