@@ -79,6 +79,7 @@ const pricingPlans = [
     ],
     cta: "Get Started Free",
     highlight: false,
+    plan: null,
   },
   {
     name: "Growth",
@@ -96,6 +97,7 @@ const pricingPlans = [
     ],
     cta: "Start Free Trial",
     highlight: true,
+    plan: "growth",
   },
   {
     name: "Scale",
@@ -112,10 +114,23 @@ const pricingPlans = [
       "Dedicated support",
       "White-label option",
     ],
-    cta: "Contact Sales",
+    cta: "Subscribe Now",
     highlight: false,
+    plan: "scale",
   },
 ];
+
+async function handleCheckout(plan: string) {
+  const res = await fetch("/api/checkout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ plan }),
+  });
+  const data = await res.json();
+  if (data.url) {
+    window.location.href = data.url;
+  }
+}
 
 export default function Home() {
   return (
@@ -429,16 +444,22 @@ export default function Home() {
                       </li>
                     ))}
                   </ul>
-                  <a
-                    href="#signup"
-                    className={`block text-center py-3 rounded-lg font-medium transition-colors ${
+                  <button
+                    onClick={() =>
+                      plan.plan
+                        ? handleCheckout(plan.plan)
+                        : document
+                            .getElementById("signup")
+                            ?.scrollIntoView({ behavior: "smooth" })
+                    }
+                    className={`block w-full text-center py-3 rounded-lg font-medium transition-colors cursor-pointer ${
                       plan.highlight
                         ? "bg-white text-primary hover:bg-blue-50"
                         : "bg-primary text-white hover:bg-primary-dark"
                     }`}
                   >
                     {plan.cta}
-                  </a>
+                  </button>
                 </div>
               ))}
             </div>
