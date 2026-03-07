@@ -34,7 +34,7 @@ const AGENT_PLANS: Record<string, object> = {
       { name: "Write first 3 SEO-optimized blog posts", status: "pending" },
       { name: "Set up rank tracking & analytics", status: "pending" },
     ],
-    blockers: ["Need website URL for site audit", "Need Google Search Console access for keyword data"],
+    blockers: ["Need website URL for site audit"],
   },
   lead_prospecting: {
     plan: "Define ideal customer profile, build lead database from multiple sources, score and qualify leads, deliver enriched lead lists.",
@@ -70,7 +70,7 @@ const AGENT_PLANS: Record<string, object> = {
       { name: "Identify top 5 conversion blockers", status: "pending" },
       { name: "Create optimization roadmap", status: "pending" },
     ],
-    blockers: ["Need website URL", "Need Google Analytics access"],
+    blockers: ["Need website URL"],
   },
   sales_followup: {
     plan: "Integrate with CRM, set up lead nurture sequences, automate follow-up reminders, and track deal pipeline.",
@@ -178,6 +178,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
     await sql`DELETE FROM agent_assignments WHERE id = ${agent_id}`;
+    return NextResponse.json({ success: true });
+  }
+
+  if (action === "resolve_blocker") {
+    const { agent_id, blocker_index, value } = body;
+    const agent = await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
+    if (agent.length === 0) {
+      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    }
+    const config = (agent[0].config as { plan?: string; tasks?: { name: string; status: string }[]; blockers?: string[] }) || {};
+    const blockers = config.blockers || [];
+    if (blocker_index < 0 || blocker_index >= blockers.length) {
+      return NextResponse.json({ error: "Invalid blocker index" }, { status: 400 });
+    }
+    // Remove the blocker
+    blockers.splice(blocker_index, 1);
+    // Advance tasks: first in_progress -> completed, next pending -> in_progress
+    const tasks = config.tasks || [];
+    let advanced = false;
+    for (let i = 0; i < tasks.length; i++) {
+      if (tasks[i].status === "in_progress" && !advanced) {
+        tasks[i].status = "completed";
+        advanced = true;
+      } else if (tasks[i].status === "pending" && advanced) {
+        tasks[i].status = "in_progress";
+        break;
+      }
+    }
+    const updatedConfig = { ...config, blockers, tasks, ...(value ? { resolved_info: value } : {}) };
+    await sql`UPDATE agent_assignments SET config = ${JSON.stringify(updatedConfig)} WHERE id = ${agent_id}`;
+    return NextResponse.json({ success: true });
+  }
+
+  if (action === "update_agent_config") {
+    const { agent_id, config: newConfig } = body;
+    const agent = await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
+    if (agent.length === 0) {
+      return NextResponse.json({ error: "Agent not found" }, { status: 404 });
+    }
+    const existingConfig = (agent[0].config as Record<string, unknown>) || {};
+    const updatedConfig = { ...existingConfig, ...newConfig };
+    await sql`UPDATE agent_assignments SET config = ${JSON.stringify(updatedConfig)} WHERE id = ${agent_id}`;
     return NextResponse.json({ success: true });
   }
 

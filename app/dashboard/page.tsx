@@ -4,6 +4,7 @@ import { useUser } from "@auth0/nextjs-auth0/client";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ChatMessage {
   id: number;
@@ -227,6 +228,58 @@ export default function DashboardPage() {
     }
   }
 
+  async function resolveBlocker(agentId: number, blockerIndex: number, blockerText: string) {
+    const value = prompt(`Provide info to resolve: "${blockerText}"\n\nEnter URL, value, or leave blank to just dismiss:`);
+    if (value === null) return; // cancelled
+    setActionLoading(true);
+    try {
+      await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "resolve_blocker", agent_id: agentId, blocker_index: blockerIndex, value }),
+      });
+      await loadAgentsData();
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function executeTask(agentId: number, taskIndex: number) {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Task execution failed");
+      }
+      await loadAgentsData();
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function runNextTask(agentId: number) {
+    setActionLoading(true);
+    try {
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, action: "run-all" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Task execution failed");
+      }
+      await loadAgentsData();
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
   async function deleteProject(projectId: number) {
     if (!confirm("Delete this project and all its agents?")) return;
     setActionLoading(true);
@@ -406,8 +459,8 @@ export default function DashboardPage() {
                     }`}
                   >
                     {msg.role === "assistant" ? (
-                      <div className="prose prose-sm prose-gray max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm">
-                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      <div className="prose prose-sm prose-gray max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&_table]:text-xs [&_table]:border-collapse [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-200 [&_td]:px-2 [&_td]:py-1">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                       </div>
                     ) : (
                       <span className="whitespace-pre-wrap">{msg.content}</span>
@@ -581,6 +634,15 @@ export default function DashboardPage() {
                               <h3 className="font-semibold text-sm">{agent.agent_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</h3>
                             </div>
                             <div className="flex items-center gap-2">
+                              {inProgressTasks > 0 || tasks.some((t) => t.status === "pending") ? (
+                                <button
+                                  onClick={() => runNextTask(agent.id)}
+                                  disabled={actionLoading}
+                                  className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer"
+                                >
+                                  Run Next
+                                </button>
+                              ) : null}
                               {statusBadge(agent.status)}
                               <button
                                 onClick={() => deactivateAgent(agent.id)}
@@ -631,9 +693,18 @@ export default function DashboardPage() {
                                         <span className="text-gray-300">&#9675;</span>
                                       )}
                                     </span>
-                                    <span className={task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}>
+                                    <span className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}>
                                       {task.name}
                                     </span>
+                                    {(task.status === "in_progress" || task.status === "pending") && (
+                                      <button
+                                        onClick={() => executeTask(agent.id, i)}
+                                        disabled={actionLoading}
+                                        className="text-xs text-green-500 hover:text-green-700 font-medium whitespace-nowrap cursor-pointer"
+                                      >
+                                        Run
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>
@@ -646,9 +717,18 @@ export default function DashboardPage() {
                               <p className="text-xs font-medium text-red-600 mb-1">Blockers</p>
                               <ul className="text-xs text-red-500 space-y-1">
                                 {blockers.map((b, i) => (
-                                  <li key={i} className="flex items-start gap-1.5">
-                                    <span className="mt-0.5 flex-shrink-0">!</span>
-                                    <span>{b}</span>
+                                  <li key={i} className="flex items-center justify-between gap-2">
+                                    <div className="flex items-start gap-1.5">
+                                      <span className="mt-0.5 flex-shrink-0">!</span>
+                                      <span>{b}</span>
+                                    </div>
+                                    <button
+                                      onClick={() => resolveBlocker(agent.id, i, b)}
+                                      disabled={actionLoading}
+                                      className="text-xs text-blue-500 hover:text-blue-700 font-medium whitespace-nowrap cursor-pointer"
+                                    >
+                                      Resolve
+                                    </button>
                                   </li>
                                 ))}
                               </ul>

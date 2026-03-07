@@ -28,9 +28,10 @@ CREATE TABLE IF NOT EXISTS agent_assignments (
 
 CREATE TABLE IF NOT EXISTS agent_reports (
   id SERIAL PRIMARY KEY,
-  assignment_id INTEGER REFERENCES agent_assignments(id),
+  agent_assignment_id INTEGER REFERENCES agent_assignments(id) ON DELETE CASCADE,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
   agent_type VARCHAR(100) NOT NULL,
-  period VARCHAR(50),
+  task_name VARCHAR(255),
   summary TEXT,
   metrics JSONB DEFAULT '{}',
   created_at TIMESTAMP DEFAULT NOW()

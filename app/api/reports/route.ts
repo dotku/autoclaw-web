@@ -22,11 +22,11 @@ export async function GET() {
 
   // Get reports for this user's projects
   const reports = await sql`
-    SELECT ar.id, ar.agent_type as agent, ar.period, ar.summary, ar.metrics, ar.created_at,
+    SELECT ar.id, ar.agent_type as agent, ar.task_name, ar.summary, ar.metrics, ar.created_at,
            aa.status, p.name as project_name
     FROM agent_reports ar
-    JOIN agent_assignments aa ON ar.assignment_id = aa.id
-    JOIN projects p ON aa.project_id = p.id
+    JOIN agent_assignments aa ON ar.agent_assignment_id = aa.id
+    JOIN projects p ON ar.project_id = p.id
     WHERE p.user_id = ${userId}
     ORDER BY ar.created_at DESC
     LIMIT 50
@@ -45,7 +45,7 @@ export async function GET() {
     reports: reports.map((r) => ({
       id: r.id,
       agent: r.agent,
-      period: r.period,
+      period: r.task_name || "",
       summary: r.summary,
       metrics: r.metrics || {},
       status: r.status,

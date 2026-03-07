@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
+import { chatWithAI } from "@/lib/ai";
+import { prospectDomain, prospectMultipleDomains } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +38,7 @@ const AGENT_PLANS: Record<string, { plan: string; tasks: { name: string; status:
       { name: "Write first 3 SEO-optimized blog posts", status: "pending" },
       { name: "Set up rank tracking & analytics", status: "pending" },
     ],
-    blockers: ["Need website URL for site audit", "Need Google Search Console access for keyword data"],
+    blockers: ["Need website URL for site audit"],
   },
   lead_prospecting: {
     plan: "Define ideal customer profile, build lead database from multiple sources, score and qualify leads, deliver enriched lead lists.",
@@ -72,7 +74,7 @@ const AGENT_PLANS: Record<string, { plan: string; tasks: { name: string; status:
       { name: "Identify top 5 conversion blockers", status: "pending" },
       { name: "Create optimization roadmap", status: "pending" },
     ],
-    blockers: ["Need website URL", "Need Google Analytics access"],
+    blockers: ["Need website URL"],
   },
   sales_followup: {
     plan: "Integrate with CRM, set up lead nurture sequences, automate follow-up reminders, and track deal pipeline.",
@@ -218,7 +220,7 @@ export async function POST(req: NextRequest) {
   // Load context
   const projects = await sql`SELECT id, name, website, description FROM projects WHERE user_id = ${userId}`;
   const agents = await sql`
-    SELECT aa.id, aa.agent_type, aa.status, aa.project_id, p.name as project_name
+    SELECT aa.id, aa.agent_type, aa.status, aa.config, aa.project_id, p.name as project_name
     FROM agent_assignments aa
     JOIN projects p ON aa.project_id = p.id
     WHERE p.user_id = ${userId}
@@ -261,6 +263,69 @@ export async function POST(req: NextRequest) {
       }
     } else {
       reply = `You need a project first. Tell me about your business and I'll create one.`;
+    }
+  }
+  // === ACTION: Configure agent / resolve blockers ===
+  else if (
+    agents.length > 0 && (
+      lowerMsg.includes("website is") || lowerMsg.includes("网站是") || lowerMsg.includes("url is") ||
+      lowerMsg.includes("my website") || lowerMsg.includes("我的网站") ||
+      lowerMsg.includes("配置") || lowerMsg.includes("configure") ||
+      lowerMsg.includes("set website") || lowerMsg.includes("set url") ||
+      (message.match(/https?:\/\/[^\s]+/) && (lowerMsg.includes("website") || lowerMsg.includes("网站") || lowerMsg.includes("site")))
+    )
+  ) {
+    const urlMatch = message.match(/https?:\/\/[^\s]+/);
+    const resolvedBlockers: string[] = [];
+    const updatedAgents: string[] = [];
+
+    if (urlMatch) {
+      const websiteUrl = urlMatch[0];
+      // Update project website if not set
+      if (projects.length > 0) {
+        const targetProject = projects[projects.length - 1];
+        if (!targetProject.website) {
+          await sql`UPDATE projects SET website = ${websiteUrl} WHERE id = ${targetProject.id} AND user_id = ${userId}`;
+        }
+      }
+
+      // Resolve blockers in all agents that need a website URL
+      for (const agent of agents) {
+        const config = agent.config as { plan?: string; tasks?: { name: string; status: string }[]; blockers?: string[] } | null;
+        if (!config?.blockers) continue;
+
+        const newBlockers = config.blockers.filter((b: string) =>
+          !b.toLowerCase().includes("website url") && !b.toLowerCase().includes("website") && !b.toLowerCase().includes("need website")
+        );
+        if (newBlockers.length < config.blockers.length) {
+          // Also advance first "in_progress" task to "completed" and next "pending" to "in_progress"
+          const tasks = config.tasks || [];
+          let advanced = false;
+          for (let i = 0; i < tasks.length; i++) {
+            if (tasks[i].status === "in_progress" && !advanced) {
+              tasks[i].status = "completed";
+              advanced = true;
+            } else if (tasks[i].status === "pending" && advanced) {
+              tasks[i].status = "in_progress";
+              break;
+            }
+          }
+
+          const updatedConfig = { ...config, blockers: newBlockers, tasks, website: websiteUrl };
+          await sql`UPDATE agent_assignments SET config = ${JSON.stringify(updatedConfig)} WHERE id = ${agent.id}`;
+          const label = AVAILABLE_AGENTS.find((a) => a.type === agent.agent_type)?.label || agent.agent_type;
+          updatedAgents.push(label);
+          resolvedBlockers.push(`"Need website URL" resolved for **${label}**`);
+        }
+      }
+    }
+
+    if (resolvedBlockers.length > 0) {
+      reply = `Website configured! Updated agents:\n\n${resolvedBlockers.map((b) => `- ${b}`).join("\n")}\n\nCheck the **Agents** tab to see updated progress.`;
+    } else if (urlMatch) {
+      reply = `Website URL saved. No agent blockers were resolved — your agents may not have pending website-related blockers.`;
+    } else {
+      reply = `Please provide a website URL. For example:\n\n"My website is https://example.com"\n"配置网站 https://medtravel.jytech.us"`;
     }
   }
   // === ACTION: Rename project ===
@@ -309,18 +374,15 @@ export async function POST(req: NextRequest) {
     }
   }
   // === ACTION: Create project ===
-  else if (projects.length === 0 || lowerMsg.includes("create project") || lowerMsg.includes("new project") || lowerMsg.includes("add project") || lowerMsg.includes("create a") && lowerMsg.includes("project")) {
-    // If no projects exist, treat any substantive message as project creation
+  else if (lowerMsg.includes("create project") || lowerMsg.includes("new project") || lowerMsg.includes("add project") || (lowerMsg.includes("create a") && lowerMsg.includes("project"))) {
     const info = extractProjectInfo(message);
-    if (info && projects.length === 0) {
-      // Auto-create project from description
+    if (info) {
       const newProject = await sql`INSERT INTO projects (user_id, name, website, description) VALUES (${userId}, ${info.name}, ${info.website}, ${info.description}) RETURNING id, name`;
-      reply = `I've created your project **"${newProject[0].name}"**.\n\nNow let's set up your marketing agents. Available agents:\n\n${AVAILABLE_AGENTS.map((a) => `- **${a.label}** — ${a.desc}`).join("\n")}\n\nWhich agents would you like to activate? You can say "activate all" or pick specific ones like "email marketing and SEO".`;
-    } else if (info && projects.length > 0) {
-      const newProject = await sql`INSERT INTO projects (user_id, name, website, description) VALUES (${userId}, ${info.name}, ${info.website}, ${info.description}) RETURNING id, name`;
-      reply = `Created new project **"${newProject[0].name}"**. Would you like to assign agents to it?`;
-    } else if (projects.length === 0) {
-      reply = `Welcome to AutoClaw! Tell me about your product or business and I'll set up a project for you.\n\nFor example: "I run an e-commerce store called GreenSkin selling organic skincare at https://greenskin.com"`;
+      if (projects.length === 0) {
+        reply = `I've created your project **"${newProject[0].name}"**.\n\nNow let's set up your marketing agents. Available agents:\n\n${AVAILABLE_AGENTS.map((a) => `- **${a.label}** — ${a.desc}`).join("\n")}\n\nWhich agents would you like to activate? You can say "activate all" or pick specific ones like "email marketing and SEO".`;
+      } else {
+        reply = `Created new project **"${newProject[0].name}"**. Would you like to assign agents to it?`;
+      }
     } else {
       reply = `To create a new project, tell me:\n1. **Name** of your product/company\n2. **Website URL** (optional)\n3. **Brief description**\n\nOr just describe your business.`;
     }
@@ -442,19 +504,133 @@ export async function POST(req: NextRequest) {
       reply += `First, tell me about your business so I can create a project, then we'll activate agents.`;
     }
   }
-  // === DEFAULT: Try to create project from description if none exist ===
-  else if (projects.length === 0 && message.length > 10) {
-    const info = extractProjectInfo(message);
-    if (info) {
-      const newProject = await sql`INSERT INTO projects (user_id, name, website, description) VALUES (${userId}, ${info.name}, ${info.website}, ${info.description}) RETURNING id, name`;
-      reply = `I've created your project **"${newProject[0].name}"**.\n\nLet's set up your marketing agents! Available:\n\n${AVAILABLE_AGENTS.map((a) => `- **${a.label}** — ${a.desc}`).join("\n")}\n\nSay "activate all" or pick specific agents like "email marketing and SEO".`;
+  // === ACTION: Find leads / prospect domains ===
+  else if (lowerMsg.includes("find leads") || lowerMsg.includes("prospect") || lowerMsg.includes("search domain") || lowerMsg.includes("find contacts") || lowerMsg.includes("find emails") || lowerMsg.includes("找客户") || lowerMsg.includes("找联系人") || lowerMsg.includes("搜索客户") || lowerMsg.includes("客户") && (lowerMsg.includes(".com") || lowerMsg.includes(".io") || lowerMsg.includes(".org") || lowerMsg.includes(".co") || lowerMsg.includes(".us")) || (lowerMsg.includes("look up") && (lowerMsg.includes(".com") || lowerMsg.includes(".io") || lowerMsg.includes(".org") || lowerMsg.includes(".co")))) {
+    // All users can search — results auto-imported to our CRM
+    const domainPattern = /([a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?)/g;
+    const domains = [...message.matchAll(domainPattern)].map((m) => m[1]).filter((d) => d.includes(".") && !d.startsWith("http"));
+
+    const isPaid = userPlan !== "starter";
+    const targetProject = projects.length > 0 ? (project_id ? projects.find((p) => p.id === project_id) || projects[projects.length - 1] : projects[projects.length - 1]) : null;
+
+    // Save leads to paid user's project database
+    async function saveLeadsToProject(leads: { email: string; firstName: string; lastName: string; company: string; position: string; source: string; confidence?: number; verified?: boolean }[], domain: string) {
+      if (!isPaid || !targetProject) return;
+      for (const l of leads) {
+        try {
+          await sql`INSERT INTO leads (project_id, user_id, email, first_name, last_name, company, position, source, domain, confidence, verified)
+            VALUES (${targetProject.id}, ${userId}, ${l.email}, ${l.firstName}, ${l.lastName}, ${l.company}, ${l.position}, ${l.source}, ${domain}, ${l.confidence || null}, ${l.verified || false})
+            ON CONFLICT (project_id, email) DO NOTHING`;
+        } catch { /* skip duplicates */ }
+      }
+    }
+
+    if (domains.length === 0) {
+      reply = `Please provide one or more domains to search. Examples:\n\n- "Find leads for stripe.com"\n- "Prospect hubspot.com, intercom.com, calendly.com"\n- "Search domain bumrungrad.com"`;
+    } else if (domains.length === 1) {
+      try {
+        const result = await prospectDomain(domains[0]);
+
+        if (result.leads.length === 0) {
+          reply = `**Lead search: ${domains[0]}**\n\nNo public contacts found for this domain. This can happen when:\n- The domain has few public-facing employees\n- Email addresses are well-protected\n- It's a small or personal website\n\nTry searching for **competitor or target customer domains** instead. For example, if you're in medical tourism, try:\n- "find leads for bumrungrad.com"\n- "find leads for mercy.com, clevelandclinic.org"`;
+        } else {
+          const displayLeads = isPaid ? result.leads : result.leads.slice(0, 10);
+          const leadTable = displayLeads.map((l) => {
+            const name = [l.firstName, l.lastName].filter(Boolean).join(" ") || "—";
+            const badge = l.verified ? " [verified]" : l.confidence && l.confidence > 80 ? ` [${l.confidence}%]` : "";
+            return `| ${l.email} | ${name} | ${l.position || "—"} | ${l.source}${badge} |`;
+          }).join("\n");
+
+          // Save to paid user's project
+          await saveLeadsToProject(result.leads, domains[0]);
+
+          reply = `**Lead search: ${domains[0]}**\n\nFound **${result.leads.length}** contacts (Hunter: ${result.hunterCount}, Snov: ${result.snovCount})\n\n| Email | Name | Position | Source |\n|-------|------|----------|--------|\n${leadTable}`;
+          if (!isPaid && result.leads.length > 10) {
+            reply += `\n\n_Showing 10 of ${result.leads.length} results. Upgrade to **Growth** or **Scale** to see all contacts and save to your database._`;
+          }
+          if (isPaid && targetProject) {
+            reply += `\n\n**${result.leads.length}** contacts saved to project **${targetProject.name}**.`;
+          }
+          reply += `\n**${result.imported}** contacts imported to CRM.`;
+        }
+      } catch {
+        reply = `Error searching ${domains[0]}. Please try again later.`;
+      }
     } else {
-      reply = `Thanks for your message! To get started, tell me your company/product name and what you do. For example:\n\n"My company is TechFlow, we build project management tools at https://techflow.io"`;
+      try {
+        const result = await prospectMultipleDomains(domains.slice(0, 5));
+        const parts: string[] = [`**Lead search across ${result.results.length} domains**\n`];
+        for (const r of result.results) {
+          const displayLeads = isPaid ? r.leads : r.leads.slice(0, 3);
+          const leadList = displayLeads.map((l) => {
+            const name = [l.firstName, l.lastName].filter(Boolean).join(" ");
+            return `  - ${l.email}${name ? ` (${name})` : ""}${l.position ? ` — ${l.position}` : ""}`;
+          }).join("\n");
+          parts.push(`**${r.domain}** — ${r.leads.length} contacts, ${r.imported} imported\n${leadList}`);
+          await saveLeadsToProject(r.leads, r.domain);
+        }
+        parts.push(`\n**Total: ${result.totalLeads} leads found, ${result.totalImported} imported to CRM.**`);
+        if (isPaid && targetProject) {
+          parts.push(`All contacts saved to project **${targetProject.name}**.`);
+        } else if (!isPaid) {
+          parts.push(`_Upgrade to **Growth** or **Scale** to see all contacts and save to your database._`);
+        }
+        reply = parts.join("\n\n");
+      } catch {
+        reply = `Error searching domains. Please try again later.`;
+      }
     }
   }
-  // === DEFAULT fallback ===
+  // === DEFAULT: AI-powered response ===
   else {
-    reply = `I can help you with:\n\n- **Create a project** — "Create a new project called [name]"\n- **Rename a project** — "Rename demo to autoclaw-marketing"\n- **Delete a project** — "Delete project demo"\n- **Activate agents** — "Activate email marketing and SEO"\n- **Check status** — "Show me agent status"\n- **Pause agents** — "Pause email marketing"\n- **List projects** — "Show my projects"\n\nWhat would you like to do?`;
+    // Try to auto-create project from description if none exist
+    if (projects.length === 0 && message.length > 10) {
+      const info = extractProjectInfo(message);
+      if (info) {
+        const newProject = await sql`INSERT INTO projects (user_id, name, website, description) VALUES (${userId}, ${info.name}, ${info.website}, ${info.description}) RETURNING id, name`;
+        reply = `I've created your project **"${newProject[0].name}"**.\n\nLet's set up your marketing agents! Available:\n\n${AVAILABLE_AGENTS.map((a) => `- **${a.label}** — ${a.desc}`).join("\n")}\n\nSay "activate all" or pick specific agents like "email marketing and SEO".`;
+
+        await sql`INSERT INTO chat_messages (user_id, project_id, role, content, agent_type) VALUES (${userId}, ${project_id || null}, 'assistant', ${reply}, 'autoclaw')`;
+        return NextResponse.json({ reply });
+      }
+    }
+
+    const systemPrompt = `You are AutoClaw, an AI marketing automation assistant. You help users manage their marketing projects and agents. Respond in the same language the user uses (Chinese if they write in Chinese, English if English).
+
+Current user context:
+- Projects: ${projects.length > 0 ? projects.map((p) => `"${p.name}"${p.website ? ` (${p.website})` : ""}`).join(", ") : "none"}
+- Active agents: ${agents.length > 0 ? agents.map((a) => `${a.agent_type} on ${a.project_name} [${a.status}]`).join(", ") : "none"}
+- Plan: ${userPlan} (${agentLimit} agent limit)
+
+Available agents: ${AVAILABLE_AGENTS.map((a) => `${a.label} (${a.desc})`).join(", ")}
+
+You can help with:
+- Creating projects (user describes their business, you guide them)
+- Activating/deactivating agents
+- Finding leads/customers for a domain (e.g. "find leads for example.com" or "找客户 example.com")
+- Configuring agents by providing website URL, API keys, etc. to resolve blockers
+- Checking agent status and reports
+- Renaming/deleting projects
+
+For actionable requests, guide the user to use specific commands. For example:
+- "create project [name]" or describe a business to auto-create
+- "activate [agent]" or "activate all"
+- "find leads for example.com" to prospect leads
+- "my website is https://example.com" to configure agents and resolve blockers
+- "rename [old] to [new]"
+
+${projects.length === 0 ? "The user has no projects yet. Help them create one by asking about their business, or answer their question directly." : ""}
+Keep responses concise and helpful. Use markdown formatting.`;
+
+    try {
+      const aiResult = await chatWithAI([
+        { role: "system", content: systemPrompt },
+        { role: "user", content: message },
+      ]);
+      reply = aiResult.content;
+    } catch {
+      reply = `I can help you with:\n\n- **Create a project** — "Create a new project called [name]"\n- **Rename a project** — "Rename demo to autoclaw-marketing"\n- **Delete a project** — "Delete project demo"\n- **Activate agents** — "Activate email marketing and SEO"\n- **Check status** — "Show me agent status"\n- **Pause agents** — "Pause email marketing"\n- **List projects** — "Show my projects"\n\nWhat would you like to do?`;
+    }
   }
 
   // Save agent reply

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const agents = [
   {
@@ -282,6 +282,15 @@ const pricingPlans = [
 ];
 
 export default function Home() {
+  const [user, setUser] = useState<{ name?: string; picture?: string; email?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/auth/profile")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => { if (data?.email || data?.name) setUser(data); })
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       {/* Header */}
@@ -322,12 +331,38 @@ export default function Home() {
               >
                 Dashboard
               </a>
-              <a
-                href="#signup"
-                className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary-dark transition-colors"
-              >
-                Get Started
-              </a>
+              {user ? (
+                <div className="flex items-center gap-3">
+                  <a href="/dashboard" className="flex items-center gap-2">
+                    {user.picture ? (
+                      <img
+                        src={user.picture}
+                        alt={user.name || "User"}
+                        className="w-8 h-8 rounded-full border-2 border-blue-200"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">
+                        {(user.name || user.email || "U")[0].toUpperCase()}
+                      </div>
+                    )}
+                    <span className="text-sm text-gray-700 max-w-[100px] truncate">{user.name || user.email}</span>
+                  </a>
+                  <a
+                    href="/auth/logout"
+                    className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                  >
+                    Logout
+                  </a>
+                </div>
+              ) : (
+                <a
+                  href="/auth/login"
+                  className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary-dark transition-colors"
+                >
+                  Get Started
+                </a>
+              )}
             </nav>
           </div>
         </div>
@@ -600,11 +635,25 @@ export default function Home() {
                     ))}
                   </ul>
                   <button
-                    onClick={() =>
-                      plan.plan === "enterprise"
-                        ? window.location.href = "mailto:jay.lin@jytech.us?subject=AutoClaw Enterprise Plan Inquiry"
-                        : window.location.href = "/auth/login"
-                    }
+                    onClick={async () => {
+                      if (plan.plan === "enterprise") {
+                        window.location.href = "mailto:jay.lin@jytech.us?subject=AutoClaw Enterprise Plan Inquiry";
+                      } else if (plan.plan === "starter") {
+                        window.location.href = "/auth/login";
+                      } else {
+                        try {
+                          const res = await fetch("/api/checkout", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ plan: plan.plan }),
+                          });
+                          const data = await res.json();
+                          if (data.url) window.location.href = data.url;
+                        } catch {
+                          window.location.href = "/auth/login";
+                        }
+                      }
+                    }}
                     className={`block w-full text-center py-3 rounded-lg font-medium transition-colors cursor-pointer ${
                       plan.highlight
                         ? "bg-white text-primary hover:bg-blue-50"
