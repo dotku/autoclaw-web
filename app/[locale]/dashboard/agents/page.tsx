@@ -3,6 +3,9 @@
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { getDictionary, type Locale } from "@/lib/i18n";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 interface AgentAssignment {
   id: number;
@@ -36,15 +39,6 @@ interface AgentReport {
   last_run: string;
 }
 
-const AGENT_OPTIONS = [
-  { type: "email_marketing", label: "Email Marketing" },
-  { type: "seo_content", label: "SEO & Content" },
-  { type: "lead_prospecting", label: "Lead Prospecting" },
-  { type: "social_media", label: "Social Media" },
-  { type: "product_manager", label: "Product Manager" },
-  { type: "sales_followup", label: "Sales Follow-up" },
-];
-
 function statusBadge(status: string | null) {
   const colors: Record<string, string> = {
     active: "bg-green-100 text-green-700",
@@ -60,6 +54,21 @@ function statusBadge(status: string | null) {
 }
 
 export default function AgentsPage() {
+  const params = useParams();
+  const locale = (params.locale as Locale) || "en";
+  const dict = getDictionary(locale);
+  const ta = dict.agentsPage;
+  const tc = dict.common;
+
+  const AGENT_OPTIONS = [
+    { type: "email_marketing", label: ta.emailMarketing },
+    { type: "seo_content", label: ta.seoContent },
+    { type: "lead_prospecting", label: ta.leadProspecting },
+    { type: "social_media", label: ta.socialMedia },
+    { type: "product_manager", label: ta.productManager },
+    { type: "sales_followup", label: ta.salesFollowup },
+  ];
+
   const { user, isLoading: userLoading } = useUser();
 
   const [reports, setReports] = useState<AgentReport[]>([]);
@@ -99,119 +108,73 @@ export default function AgentsPage() {
     if (!newProject.name.trim() || actionLoading) return;
     setActionLoading(true);
     try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create_project", ...newProject }),
-      });
-      if (res.ok) {
-        setNewProject({ name: "", website: "", description: "" });
-        setShowCreateProject(false);
-        await loadData();
-      }
-    } finally {
-      setActionLoading(false);
-    }
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_project", ...newProject }) });
+      if (res.ok) { setNewProject({ name: "", website: "", description: "" }); setShowCreateProject(false); await loadData(); }
+    } finally { setActionLoading(false); }
   }
 
   async function activateAgent(projectId: number, agentType: string) {
     setActionLoading(true);
     try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "activate_agent", project_id: projectId, agent_type: agentType }),
-      });
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "activate_agent", project_id: projectId, agent_type: agentType }) });
       const data = await res.json();
       if (!res.ok) alert(data.error);
       await loadData();
-    } finally {
-      setActionLoading(false);
-    }
+    } finally { setActionLoading(false); }
   }
 
   async function deactivateAgent(agentId: number) {
-    if (!confirm("Remove this agent?")) return;
+    if (!confirm(ta.confirmRemoveAgent)) return;
     setActionLoading(true);
     try {
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "deactivate_agent", agent_id: agentId }),
-      });
+      await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "deactivate_agent", agent_id: agentId }) });
       await loadData();
-    } finally {
-      setActionLoading(false);
-    }
+    } finally { setActionLoading(false); }
   }
 
   async function resolveBlocker(agentId: number, blockerIndex: number, blockerText: string) {
-    const value = prompt(`Provide info to resolve: "${blockerText}"\n\nEnter URL, value, or leave blank to just dismiss:`);
+    const value = prompt(`${ta.resolvePrompt} "${blockerText}"\n\n${ta.resolveHint}`);
     if (value === null) return;
     setActionLoading(true);
     try {
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "resolve_blocker", agent_id: agentId, blocker_index: blockerIndex, value }),
-      });
+      await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resolve_blocker", agent_id: agentId, blocker_index: blockerIndex, value }) });
       await loadData();
-    } finally {
-      setActionLoading(false);
-    }
+    } finally { setActionLoading(false); }
   }
 
   async function executeTask(agentId: number, taskIndex: number) {
     setActionLoading(true);
     try {
-      const res = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }),
-      });
+      const res = await fetch("/api/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }) });
       const data = await res.json();
-      if (!res.ok) alert(data.error || "Task execution failed");
+      if (!res.ok) alert(data.error || ta.taskFailed);
       await loadData();
-    } finally {
-      setActionLoading(false);
-    }
+    } finally { setActionLoading(false); }
   }
 
   async function runNextTask(agentId: number) {
     setActionLoading(true);
     try {
-      const res = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agent_id: agentId, action: "run-all" }),
-      });
+      const res = await fetch("/api/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent_id: agentId, action: "run-all" }) });
       const data = await res.json();
-      if (!res.ok) alert(data.error || "Task execution failed");
+      if (!res.ok) alert(data.error || ta.taskFailed);
       await loadData();
-    } finally {
-      setActionLoading(false);
-    }
+    } finally { setActionLoading(false); }
   }
 
   async function deleteProject(projectId: number) {
-    if (!confirm("Delete this project and all its agents?")) return;
+    if (!confirm(ta.confirmDeleteProject)) return;
     setActionLoading(true);
     try {
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete_project", project_id: projectId }),
-      });
+      await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete_project", project_id: projectId }) });
       await loadData();
-    } finally {
-      setActionLoading(false);
-    }
+    } finally { setActionLoading(false); }
   }
 
   if (userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-gray-500">{tc.loading}</p>
       </div>
     );
   }
@@ -220,10 +183,8 @@ export default function AgentsPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">Sign in to view your agents</h1>
-          <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">
-            Log In
-          </a>
+          <h1 className="text-2xl font-bold mb-4">{ta.signInAgents}</h1>
+          <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -233,75 +194,60 @@ export default function AgentsPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold tracking-tight">
+          <Link href={`/${locale}`} className="text-xl font-bold tracking-tight">
             <span className="text-blue-600">Auto</span>Claw
           </Link>
           <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
-              Dashboard
-            </Link>
+            <Link href={`/${locale}/dashboard`} className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.dashboard}</Link>
+            <LanguageSwitcher locale={locale} />
             <span className="text-sm text-gray-600 hidden sm:inline">{user.email}</span>
-            <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
-              Log Out
-            </a>
+            <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
           </div>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Agents</h1>
+          <h1 className="text-2xl font-bold">{ta.title}</h1>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            <Link href="/dashboard" className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">
-              Chat
-            </Link>
-            <span className="px-4 py-2 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm">
-              Agents
-            </span>
-            <Link href="/dashboard/billing" className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">
-              Billing
-            </Link>
+            <Link href={`/${locale}/dashboard`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.chat}</Link>
+            <span className="px-4 py-2 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm">{tc.agents}</span>
+            <Link href={`/${locale}/dashboard/billing`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.billing}</Link>
           </div>
         </div>
 
         {loading ? (
-          <p className="text-gray-500">Loading agents...</p>
+          <p className="text-gray-500">{ta.loadingAgents}</p>
         ) : (
           <>
-            {/* Plan info & Actions bar */}
             <div className="flex items-center justify-between mb-4">
               <div className="text-sm text-gray-500">
-                <span className="font-medium text-gray-700 capitalize">{planInfo.plan}</span> plan — {planInfo.totalAgents}/{planInfo.agentLimit === 999 ? "Unlimited" : planInfo.agentLimit} agents used
+                <span className="font-medium text-gray-700 capitalize">{planInfo.plan}</span> {ta.plan} — {planInfo.totalAgents}/{planInfo.agentLimit === 999 ? ta.unlimited : planInfo.agentLimit} {ta.agentsUsed}
               </div>
-              <button
-                onClick={() => setShowCreateProject(true)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-              >
-                + New Project
+              <button onClick={() => setShowCreateProject(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+                {ta.newProject}
               </button>
             </div>
 
-            {/* Create Project Form */}
             {showCreateProject && (
               <form onSubmit={createProject} className="bg-white rounded-lg border border-gray-200 p-5 mb-4">
-                <h3 className="font-semibold text-sm mb-3">Create Project</h3>
+                <h3 className="font-semibold text-sm mb-3">{ta.createProject}</h3>
                 <div className="space-y-3">
-                  <input type="text" placeholder="Project name *" value={newProject.name} onChange={(e) => setNewProject({ ...newProject, name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-                  <input type="text" placeholder="Website URL (optional)" value={newProject.website} onChange={(e) => setNewProject({ ...newProject, website: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <textarea placeholder="Brief description (optional)" value={newProject.description} onChange={(e) => setNewProject({ ...newProject, description: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" rows={2} />
+                  <input type="text" placeholder={ta.projectName} value={newProject.name} onChange={(e) => setNewProject({ ...newProject, name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
+                  <input type="text" placeholder={ta.websiteUrl} value={newProject.website} onChange={(e) => setNewProject({ ...newProject, website: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <textarea placeholder={ta.briefDesc} value={newProject.description} onChange={(e) => setNewProject({ ...newProject, description: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" rows={2} />
                   <div className="flex gap-2">
-                    <button type="submit" disabled={actionLoading || !newProject.name.trim()} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">Create</button>
-                    <button type="button" onClick={() => setShowCreateProject(false)} className="text-gray-500 hover:text-gray-700 px-4 py-2 text-sm cursor-pointer">Cancel</button>
+                    <button type="submit" disabled={actionLoading || !newProject.name.trim()} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">{tc.create}</button>
+                    <button type="button" onClick={() => setShowCreateProject(false)} className="text-gray-500 hover:text-gray-700 px-4 py-2 text-sm cursor-pointer">{tc.cancel}</button>
                   </div>
                 </div>
               </form>
             )}
 
-            {/* Projects with their agents */}
             {projects.length === 0 && agents.length === 0 && (
               <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                <p className="text-gray-500 mb-2">No projects yet</p>
-                <p className="text-gray-400 text-sm">Create a project to get started with AI marketing agents.</p>
+                <p className="text-gray-500 mb-2">{ta.noProjects}</p>
+                <p className="text-gray-400 text-sm">{ta.noProjectsDesc}</p>
               </div>
             )}
 
@@ -324,16 +270,16 @@ export default function AgentsPage() {
                           className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
                           defaultValue=""
                         >
-                          <option value="" disabled>+ Add Agent</option>
+                          <option value="" disabled>{ta.addAgent}</option>
                           {availableToAdd.map((a) => (<option key={a.type} value={a.type}>{a.label}</option>))}
                         </select>
                       )}
-                      <button onClick={() => deleteProject(project.id)} className="text-xs text-red-400 hover:text-red-600 cursor-pointer">Delete</button>
+                      <button onClick={() => deleteProject(project.id)} className="text-xs text-red-400 hover:text-red-600 cursor-pointer">{tc.delete}</button>
                     </div>
                   </div>
 
                   {projectAgents.length === 0 ? (
-                    <p className="text-sm text-gray-400 bg-white rounded-lg border border-gray-200 p-4">No agents assigned. Use the dropdown above to add agents.</p>
+                    <p className="text-sm text-gray-400 bg-white rounded-lg border border-gray-200 p-4">{ta.noAgents}</p>
                   ) : (
                     <div className="space-y-3">
                       {projectAgents.map((agent) => {
@@ -350,16 +296,16 @@ export default function AgentsPage() {
                               <h3 className="font-semibold text-sm">{agent.agent_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</h3>
                               <div className="flex items-center gap-2">
                                 {(inProgressTasks > 0 || tasks.some((t) => t.status === "pending")) && (
-                                  <button onClick={() => runNextTask(agent.id)} disabled={actionLoading} className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer">Run Next</button>
+                                  <button onClick={() => runNextTask(agent.id)} disabled={actionLoading} className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer">{ta.runNext}</button>
                                 )}
                                 {statusBadge(agent.status)}
-                                <button onClick={() => deactivateAgent(agent.id)} className="text-xs text-red-400 hover:text-red-600 cursor-pointer">Remove</button>
+                                <button onClick={() => deactivateAgent(agent.id)} className="text-xs text-red-400 hover:text-red-600 cursor-pointer">{tc.remove}</button>
                               </div>
                             </div>
 
                             {config.plan && (
                               <div className="mb-3">
-                                <p className="text-xs font-medium text-gray-500 mb-1">Plan</p>
+                                <p className="text-xs font-medium text-gray-500 mb-1">{ta.planLabel}</p>
                                 <p className="text-sm text-gray-600">{config.plan}</p>
                               </div>
                             )}
@@ -367,8 +313,8 @@ export default function AgentsPage() {
                             {tasks.length > 0 && (
                               <div className="mb-3">
                                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                  <span className="font-medium">Execution Progress</span>
-                                  <span>{completedTasks}/{tasks.length} tasks ({progress}%)</span>
+                                  <span className="font-medium">{ta.executionProgress}</span>
+                                  <span>{completedTasks}/{tasks.length} {ta.tasks} ({progress}%)</span>
                                 </div>
                                 <div className="w-full bg-gray-100 rounded-full h-2">
                                   <div className="bg-blue-500 h-2 rounded-full transition-all" style={{ width: `${Math.max(progress, inProgressTasks > 0 ? 8 : 0)}%` }} />
@@ -378,18 +324,16 @@ export default function AgentsPage() {
 
                             {tasks.length > 0 && (
                               <div className="mb-3">
-                                <p className="text-xs font-medium text-gray-500 mb-2">Tasks</p>
+                                <p className="text-xs font-medium text-gray-500 mb-2">{ta.tasksLabel}</p>
                                 <div className="space-y-1.5">
                                   {tasks.map((task, i) => (
                                     <div key={i} className="flex items-start gap-2 text-xs">
                                       <span className="mt-0.5 flex-shrink-0">
                                         {task.status === "completed" ? <span className="text-green-500">&#10003;</span> : task.status === "in_progress" ? <span className="text-blue-500">&#9679;</span> : <span className="text-gray-300">&#9675;</span>}
                                       </span>
-                                      <span className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}>
-                                        {task.name}
-                                      </span>
+                                      <span className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}>{task.name}</span>
                                       {(task.status === "in_progress" || task.status === "pending") && (
-                                        <button onClick={() => executeTask(agent.id, i)} disabled={actionLoading} className="text-xs text-green-500 hover:text-green-700 font-medium whitespace-nowrap cursor-pointer">Run</button>
+                                        <button onClick={() => executeTask(agent.id, i)} disabled={actionLoading} className="text-xs text-green-500 hover:text-green-700 font-medium whitespace-nowrap cursor-pointer">{tc.run}</button>
                                       )}
                                     </div>
                                   ))}
@@ -399,7 +343,7 @@ export default function AgentsPage() {
 
                             {blockers.length > 0 && (
                               <div className="bg-red-50 border border-red-100 rounded-md p-3">
-                                <p className="text-xs font-medium text-red-600 mb-1">Blockers</p>
+                                <p className="text-xs font-medium text-red-600 mb-1">{ta.blockers}</p>
                                 <ul className="text-xs text-red-500 space-y-1">
                                   {blockers.map((b, i) => (
                                     <li key={i} className="flex items-center justify-between gap-2">
@@ -407,7 +351,7 @@ export default function AgentsPage() {
                                         <span className="mt-0.5 flex-shrink-0">!</span>
                                         <span>{b}</span>
                                       </div>
-                                      <button onClick={() => resolveBlocker(agent.id, i, b)} disabled={actionLoading} className="text-xs text-blue-500 hover:text-blue-700 font-medium whitespace-nowrap cursor-pointer">Resolve</button>
+                                      <button onClick={() => resolveBlocker(agent.id, i, b)} disabled={actionLoading} className="text-xs text-blue-500 hover:text-blue-700 font-medium whitespace-nowrap cursor-pointer">{tc.resolve}</button>
                                     </li>
                                   ))}
                                 </ul>
@@ -422,12 +366,11 @@ export default function AgentsPage() {
               );
             })}
 
-            {/* Reports */}
-            <h2 className="text-lg font-semibold mb-3 mt-8">Reports</h2>
+            <h2 className="text-lg font-semibold mb-3 mt-8">{ta.reports}</h2>
             {reports.length === 0 ? (
               <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                <p className="text-gray-500 mb-2">No agent reports yet</p>
-                <p className="text-gray-400 text-sm">Reports will appear here once your AI agents start running.</p>
+                <p className="text-gray-500 mb-2">{ta.noReports}</p>
+                <p className="text-gray-400 text-sm">{ta.noReportsDesc}</p>
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
@@ -448,7 +391,7 @@ export default function AgentsPage() {
                       ))}
                     </div>
                     <p className="text-gray-400 text-xs mt-3">
-                      {report.period} &middot; Last run: {new Date(report.last_run).toLocaleString()}
+                      {report.period} &middot; {ta.lastRun} {new Date(report.last_run).toLocaleString()}
                     </p>
                   </div>
                 ))}

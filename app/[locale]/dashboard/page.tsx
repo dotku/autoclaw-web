@@ -3,8 +3,11 @@
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { getDictionary, type Locale } from "@/lib/i18n";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 interface ChatMessage {
   id: number;
@@ -68,15 +71,19 @@ function statusBadge(status: string | null) {
   };
   const s = status || "unknown";
   return (
-    <span
-      className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[s] || "bg-gray-100 text-gray-600"}`}
-    >
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[s] || "bg-gray-100 text-gray-600"}`}>
       {s}
     </span>
   );
 }
 
 export default function DashboardPage() {
+  const params = useParams();
+  const locale = (params.locale as Locale) || "en";
+  const dict = getDictionary(locale);
+  const td = dict.dashboard;
+  const tc = dict.common;
+
   const { user, isLoading: userLoading } = useUser();
   const [activeTab, setActiveTab] = useState<"chat" | "billing">("chat");
 
@@ -91,7 +98,6 @@ export default function DashboardPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [billingLoading, setBillingLoading] = useState(true);
 
-  // Load chat history
   useEffect(() => {
     if (!user) return;
     fetch("/api/chat")
@@ -99,7 +105,6 @@ export default function DashboardPage() {
       .then((data) => setMessages(data.messages || []));
   }, [user]);
 
-  // Load billing when tab opens
   useEffect(() => {
     if (!user || activeTab !== "billing") return;
     setBillingLoading(true);
@@ -112,7 +117,6 @@ export default function DashboardPage() {
       .finally(() => setBillingLoading(false));
   }, [user, activeTab]);
 
-  // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -120,49 +124,19 @@ export default function DashboardPage() {
   async function sendMessage(e: React.FormEvent) {
     e.preventDefault();
     if (!input.trim() || sending) return;
-
     const userMsg = input.trim();
     setInput("");
     setSending(true);
-
-    // Optimistic update
-    const tempMsg: ChatMessage = {
-      id: Date.now(),
-      role: "user",
-      content: userMsg,
-      created_at: new Date().toISOString(),
-    };
+    const tempMsg: ChatMessage = { id: Date.now(), role: "user", content: userMsg, created_at: new Date().toISOString() };
     setMessages((prev) => [...prev, tempMsg]);
-
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMsg }),
-      });
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: userMsg }) });
       const data = await res.json();
       if (data.reply) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now() + 1,
-            role: "assistant",
-            content: data.reply,
-            agent_type: "autoclaw",
-            created_at: new Date().toISOString(),
-          },
-        ]);
+        setMessages((prev) => [...prev, { id: Date.now() + 1, role: "assistant", content: data.reply, agent_type: "autoclaw", created_at: new Date().toISOString() }]);
       }
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now() + 1,
-          role: "assistant",
-          content: "Sorry, something went wrong. Please try again.",
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      setMessages((prev) => [...prev, { id: Date.now() + 1, role: "assistant", content: td.errorMsg, created_at: new Date().toISOString() }]);
     } finally {
       setSending(false);
     }
@@ -171,7 +145,7 @@ export default function DashboardPage() {
   if (userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p className="text-gray-500">Loading...</p>
+        <p className="text-gray-500">{tc.loading}</p>
       </div>
     );
   }
@@ -180,15 +154,8 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <h1 className="text-2xl font-bold mb-4">
-            Sign in to view your dashboard
-          </h1>
-          <a
-            href="/auth/login"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
-          >
-            Log In
-          </a>
+          <h1 className="text-2xl font-bold mb-4">{td.signInDashboard}</h1>
+          <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -198,47 +165,35 @@ export default function DashboardPage() {
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-xl font-bold tracking-tight">
+          <Link href={`/${locale}`} className="text-xl font-bold tracking-tight">
             <span className="text-blue-600">Auto</span>Claw
           </Link>
           <div className="flex items-center gap-4">
+            <LanguageSwitcher locale={locale} />
             <span className="text-sm text-gray-600 hidden sm:inline">{user.email}</span>
-            <a
-              href="/auth/logout"
-              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-            >
-              Log Out
-            </a>
+            <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
           </div>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full flex flex-col min-h-0">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold">Dashboard</h1>
+          <h1 className="text-2xl font-bold">{td.title}</h1>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
             <button
               onClick={() => setActiveTab("chat")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
-                activeTab === "chat"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${activeTab === "chat" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
-              Chat
+              {tc.chat}
             </button>
-            <Link href="/dashboard/agents" className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">
-              Agents
+            <Link href={`/${locale}/dashboard/agents`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">
+              {tc.agents}
             </Link>
             <button
               onClick={() => setActiveTab("billing")}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
-                activeTab === "billing"
-                  ? "bg-white text-gray-900 shadow-sm"
-                  : "text-gray-500 hover:text-gray-700"
-              }`}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${activeTab === "billing" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
             >
-              Billing
+              {tc.billing}
             </button>
           </div>
         </div>
@@ -249,23 +204,14 @@ export default function DashboardPage() {
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {messages.length === 0 && (
                 <div className="text-center py-12 text-gray-400">
-                  <div className="text-4xl mb-4">🤖</div>
-                  <p className="text-lg font-medium text-gray-600 mb-2">Welcome to AutoClaw</p>
-                  <p className="text-sm">Tell me about your business and I&apos;ll help you set up AI marketing agents.</p>
+                  <div className="text-4xl mb-4">&#129302;</div>
+                  <p className="text-lg font-medium text-gray-600 mb-2">{td.welcomeTitle}</p>
+                  <p className="text-sm">{td.welcomeMsg}</p>
                 </div>
               )}
               {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                >
-                  <div
-                    className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${
-                      msg.role === "user"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-100 text-gray-800"
-                    }`}
-                  >
+                <div key={msg.id} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${msg.role === "user" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-800"}`}>
                     {msg.role === "assistant" ? (
                       <div className="prose prose-sm prose-gray max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&_table]:text-xs [&_table]:border-collapse [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-200 [&_td]:px-2 [&_td]:py-1">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
@@ -278,9 +224,7 @@ export default function DashboardPage() {
               ))}
               {sending && (
                 <div className="flex justify-start">
-                  <div className="bg-gray-100 text-gray-400 rounded-lg px-4 py-3 text-sm">
-                    Thinking...
-                  </div>
+                  <div className="bg-gray-100 text-gray-400 rounded-lg px-4 py-3 text-sm">{td.thinking}</div>
                 </div>
               )}
               <div ref={chatEndRef} />
@@ -290,16 +234,12 @@ export default function DashboardPage() {
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Type a message..."
+                placeholder={td.typeMessage}
                 className="flex-1 border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={sending}
               />
-              <button
-                type="submit"
-                disabled={sending || !input.trim()}
-                className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-              >
-                Send
+              <button type="submit" disabled={sending || !input.trim()} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+                {tc.send}
               </button>
             </form>
           </div>
@@ -309,62 +249,39 @@ export default function DashboardPage() {
         {activeTab === "billing" && (
           <div className="flex-1 overflow-y-auto min-h-0">
             {billingLoading ? (
-              <p className="text-gray-500">Loading billing info...</p>
+              <p className="text-gray-500">{tc.loading}</p>
             ) : (
               <>
-                {/* Subscriptions */}
                 <section className="mb-8">
-                  <h2 className="text-lg font-semibold mb-4">
-                    Active Subscriptions
-                  </h2>
+                  <h2 className="text-lg font-semibold mb-4">{td.activeSubscriptions}</h2>
                   {subscriptions.length === 0 ? (
                     <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                      <p className="text-gray-500 mb-4">No active subscriptions</p>
-                      <Link
-                        href="/#pricing"
-                        className="text-blue-600 hover:underline text-sm font-medium"
-                      >
-                        View Plans
-                      </Link>
+                      <p className="text-gray-500 mb-4">{td.noSubscriptions}</p>
+                      <Link href={`/${locale}#pricing`} className="text-blue-600 hover:underline text-sm font-medium">{td.viewPlans}</Link>
                     </div>
                   ) : (
                     <div className="grid gap-4">
                       {subscriptions.map((sub) => (
-                        <div
-                          key={sub.id}
-                          className="bg-white rounded-lg border border-gray-200 p-6"
-                        >
+                        <div key={sub.id} className="bg-white rounded-lg border border-gray-200 p-6">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-3">
-                              <h3 className="font-semibold">
-                                {sub.amount
-                                  ? `${formatCurrency(sub.amount, "usd")}/${sub.interval}`
-                                  : "Custom Plan"}
-                              </h3>
+                              <h3 className="font-semibold">{sub.amount ? `${formatCurrency(sub.amount, "usd")}/${sub.interval}` : td.customPlan}</h3>
                               {statusBadge(sub.status)}
                             </div>
-                            {sub.cancel_at_period_end && (
-                              <span className="text-xs text-red-500 font-medium">
-                                Cancels at period end
-                              </span>
-                            )}
+                            {sub.cancel_at_period_end && <span className="text-xs text-red-500 font-medium">{td.cancelsAtEnd}</span>}
                           </div>
-                          <p className="text-sm text-gray-500">
-                            Current period: {formatDate(sub.current_period_start)} —{" "}
-                            {formatDate(sub.current_period_end)}
-                          </p>
+                          <p className="text-sm text-gray-500">{td.currentPeriod} {formatDate(sub.current_period_start)} — {formatDate(sub.current_period_end)}</p>
                         </div>
                       ))}
                     </div>
                   )}
                 </section>
 
-                {/* Invoices */}
                 <section>
-                  <h2 className="text-lg font-semibold mb-4">Invoices</h2>
+                  <h2 className="text-lg font-semibold mb-4">{td.invoices}</h2>
                   {invoices.length === 0 ? (
                     <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                      <p className="text-gray-500">No invoices yet</p>
+                      <p className="text-gray-500">{td.noInvoices}</p>
                     </div>
                   ) : (
                     <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -372,67 +289,26 @@ export default function DashboardPage() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
-                              <th className="text-left px-4 py-3 font-medium text-gray-600">
-                                Invoice
-                              </th>
-                              <th className="text-left px-4 py-3 font-medium text-gray-600">
-                                Date
-                              </th>
-                              <th className="text-left px-4 py-3 font-medium text-gray-600">
-                                Amount
-                              </th>
-                              <th className="text-left px-4 py-3 font-medium text-gray-600">
-                                Status
-                              </th>
-                              <th className="text-right px-4 py-3 font-medium text-gray-600">
-                                Actions
-                              </th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600">{td.invoice}</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600">{td.date}</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600">{td.amount}</th>
+                              <th className="text-left px-4 py-3 font-medium text-gray-600">{td.status}</th>
+                              <th className="text-right px-4 py-3 font-medium text-gray-600">{td.actions}</th>
                             </tr>
                           </thead>
                           <tbody>
                             {invoices.map((inv) => (
-                              <tr
-                                key={inv.id}
-                                className="border-b border-gray-100 last:border-0"
-                              >
+                              <tr key={inv.id} className="border-b border-gray-100 last:border-0">
                                 <td className="px-4 py-3">
-                                  <p className="font-medium">
-                                    {inv.number || inv.id.slice(0, 16)}
-                                  </p>
-                                  <p className="text-gray-400 text-xs">
-                                    {inv.description}
-                                  </p>
+                                  <p className="font-medium">{inv.number || inv.id.slice(0, 16)}</p>
+                                  <p className="text-gray-400 text-xs">{inv.description}</p>
                                 </td>
-                                <td className="px-4 py-3 text-gray-600">
-                                  {formatDate(inv.created)}
-                                </td>
-                                <td className="px-4 py-3 font-medium">
-                                  {formatCurrency(inv.amount_due, inv.currency)}
-                                </td>
-                                <td className="px-4 py-3">
-                                  {statusBadge(inv.status)}
-                                </td>
+                                <td className="px-4 py-3 text-gray-600">{formatDate(inv.created)}</td>
+                                <td className="px-4 py-3 font-medium">{formatCurrency(inv.amount_due, inv.currency)}</td>
+                                <td className="px-4 py-3">{statusBadge(inv.status)}</td>
                                 <td className="px-4 py-3 text-right space-x-2">
-                                  {inv.hosted_invoice_url && (
-                                    <a
-                                      href={inv.hosted_invoice_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 hover:underline"
-                                    >
-                                      View
-                                    </a>
-                                  )}
-                                  {inv.invoice_pdf && (
-                                    <a
-                                      href={inv.invoice_pdf}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 hover:underline"
-                                    >
-                                      PDF
-                                    </a>
-                                  )}
+                                  {inv.hosted_invoice_url && <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{td.view}</a>}
+                                  {inv.invoice_pdf && <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{td.pdf}</a>}
                                 </td>
                               </tr>
                             ))}
