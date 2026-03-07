@@ -38,47 +38,6 @@ interface Subscription {
   cancel_at_period_end: boolean;
 }
 
-interface AgentReport {
-  id: string;
-  agent: string;
-  period: string;
-  summary: string;
-  metrics: Record<string, string | number>;
-  status: string;
-  project: string;
-  last_run: string;
-}
-
-interface AgentAssignment {
-  id: number;
-  agent_type: string;
-  status: string;
-  project_name: string;
-  project_id?: number;
-  config?: {
-    plan?: string;
-    tasks?: { name: string; status: string }[];
-    blockers?: string[];
-  };
-}
-
-interface Project {
-  id: number;
-  name: string;
-  website: string;
-  description: string;
-  created_at: string;
-}
-
-const AGENT_OPTIONS = [
-  { type: "email_marketing", label: "Email Marketing" },
-  { type: "seo_content", label: "SEO & Content" },
-  { type: "lead_prospecting", label: "Lead Prospecting" },
-  { type: "social_media", label: "Social Media" },
-  { type: "product_manager", label: "Product Manager" },
-  { type: "sales_followup", label: "Sales Follow-up" },
-];
-
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -119,23 +78,13 @@ function statusBadge(status: string | null) {
 
 export default function DashboardPage() {
   const { user, isLoading: userLoading } = useUser();
-  const [activeTab, setActiveTab] = useState<"chat" | "agents" | "billing">("chat");
+  const [activeTab, setActiveTab] = useState<"chat" | "billing">("chat");
 
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
-
-  // Agents state
-  const [reports, setReports] = useState<AgentReport[]>([]);
-  const [agents, setAgents] = useState<AgentAssignment[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [agentsLoading, setAgentsLoading] = useState(true);
-  const [planInfo, setPlanInfo] = useState({ plan: "starter", agentLimit: 2, totalAgents: 0 });
-  const [showCreateProject, setShowCreateProject] = useState(false);
-  const [newProject, setNewProject] = useState({ name: "", website: "", description: "" });
-  const [actionLoading, setActionLoading] = useState(false);
 
   // Billing state
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -149,151 +98,6 @@ export default function DashboardPage() {
       .then((r) => r.json())
       .then((data) => setMessages(data.messages || []));
   }, [user]);
-
-  // Load agents/reports/projects when tab opens
-  const loadAgentsData = () => {
-    return Promise.all([
-      fetch("/api/reports").then((r) => r.json()),
-      fetch("/api/projects").then((r) => r.json()),
-    ]).then(([reportData, projectData]) => {
-      setReports(reportData.reports || []);
-      setAgents(reportData.agents || []);
-      setProjects(projectData.projects || []);
-      setPlanInfo({
-        plan: projectData.plan || "starter",
-        agentLimit: projectData.agentLimit || 2,
-        totalAgents: projectData.totalAgents || 0,
-      });
-    });
-  };
-
-  useEffect(() => {
-    if (!user || activeTab !== "agents") return;
-    setAgentsLoading(true);
-    loadAgentsData().finally(() => setAgentsLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, activeTab]);
-
-  async function createProject(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newProject.name.trim() || actionLoading) return;
-    setActionLoading(true);
-    try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create_project", ...newProject }),
-      });
-      if (res.ok) {
-        setNewProject({ name: "", website: "", description: "" });
-        setShowCreateProject(false);
-        await loadAgentsData();
-      }
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function activateAgent(projectId: number, agentType: string) {
-    setActionLoading(true);
-    try {
-      const res = await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "activate_agent", project_id: projectId, agent_type: agentType }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error);
-        return;
-      }
-      await loadAgentsData();
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function deactivateAgent(agentId: number) {
-    if (!confirm("Remove this agent?")) return;
-    setActionLoading(true);
-    try {
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "deactivate_agent", agent_id: agentId }),
-      });
-      await loadAgentsData();
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function resolveBlocker(agentId: number, blockerIndex: number, blockerText: string) {
-    const value = prompt(`Provide info to resolve: "${blockerText}"\n\nEnter URL, value, or leave blank to just dismiss:`);
-    if (value === null) return; // cancelled
-    setActionLoading(true);
-    try {
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "resolve_blocker", agent_id: agentId, blocker_index: blockerIndex, value }),
-      });
-      await loadAgentsData();
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function executeTask(agentId: number, taskIndex: number) {
-    setActionLoading(true);
-    try {
-      const res = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Task execution failed");
-      }
-      await loadAgentsData();
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function runNextTask(agentId: number) {
-    setActionLoading(true);
-    try {
-      const res = await fetch("/api/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agent_id: agentId, action: "run-all" }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || "Task execution failed");
-      }
-      await loadAgentsData();
-    } finally {
-      setActionLoading(false);
-    }
-  }
-
-  async function deleteProject(projectId: number) {
-    if (!confirm("Delete this project and all its agents?")) return;
-    setActionLoading(true);
-    try {
-      await fetch("/api/projects", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete_project", project_id: projectId }),
-      });
-      await loadAgentsData();
-    } finally {
-      setActionLoading(false);
-    }
-  }
 
   // Load billing when tab opens
   useEffect(() => {
@@ -390,12 +194,6 @@ export default function DashboardPage() {
     );
   }
 
-  const tabs = [
-    { key: "chat" as const, label: "Chat" },
-    { key: "agents" as const, label: "Agents" },
-    { key: "billing" as const, label: "Billing" },
-  ];
-
   return (
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <header className="bg-white border-b border-gray-200">
@@ -419,19 +217,29 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold">Dashboard</h1>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
-                  activeTab === tab.key
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
+            <button
+              onClick={() => setActiveTab("chat")}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
+                activeTab === "chat"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Chat
+            </button>
+            <Link href="/dashboard/agents" className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">
+              Agents
+            </Link>
+            <button
+              onClick={() => setActiveTab("billing")}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors cursor-pointer ${
+                activeTab === "billing"
+                  ? "bg-white text-gray-900 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              Billing
+            </button>
           </div>
         </div>
 
@@ -495,304 +303,6 @@ export default function DashboardPage() {
               </button>
             </form>
           </div>
-        )}
-
-        {/* Agents Tab */}
-        {activeTab === "agents" && (
-          <section className="flex-1 overflow-y-auto min-h-0">
-            {agentsLoading ? (
-              <p className="text-gray-500">Loading agents...</p>
-            ) : (
-              <>
-                {/* Plan info & Actions bar */}
-                <div className="flex items-center justify-between mb-4">
-                  <div className="text-sm text-gray-500">
-                    <span className="font-medium text-gray-700 capitalize">{planInfo.plan}</span> plan — {planInfo.totalAgents}/{planInfo.agentLimit === 999 ? "Unlimited" : planInfo.agentLimit} agents used
-                  </div>
-                  <button
-                    onClick={() => setShowCreateProject(true)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                  >
-                    + New Project
-                  </button>
-                </div>
-
-                {/* Create Project Form */}
-                {showCreateProject && (
-                  <form onSubmit={createProject} className="bg-white rounded-lg border border-gray-200 p-5 mb-4">
-                    <h3 className="font-semibold text-sm mb-3">Create Project</h3>
-                    <div className="space-y-3">
-                      <input
-                        type="text"
-                        placeholder="Project name *"
-                        value={newProject.name}
-                        onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        required
-                      />
-                      <input
-                        type="text"
-                        placeholder="Website URL (optional)"
-                        value={newProject.website}
-                        onChange={(e) => setNewProject({ ...newProject, website: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <textarea
-                        placeholder="Brief description (optional)"
-                        value={newProject.description}
-                        onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                        rows={2}
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          disabled={actionLoading || !newProject.name.trim()}
-                          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-                        >
-                          Create
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowCreateProject(false)}
-                          className="text-gray-500 hover:text-gray-700 px-4 py-2 text-sm cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                )}
-
-                {/* Projects with their agents */}
-                {projects.length === 0 && agents.length === 0 && (
-                  <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                    <p className="text-gray-500 mb-2">No projects yet</p>
-                    <p className="text-gray-400 text-sm">Create a project to get started with AI marketing agents.</p>
-                  </div>
-                )}
-
-                {projects.map((project) => {
-                  const projectAgents = agents.filter((a) => a.project_name === project.name);
-                  const assignedTypes = projectAgents.map((a) => a.agent_type);
-                  const availableToAdd = AGENT_OPTIONS.filter((a) => !assignedTypes.includes(a.type));
-
-                  return (
-                    <div key={project.id} className="mb-6">
-                      <div className="flex items-center justify-between mb-3">
-                        <div>
-                          <h2 className="text-base font-semibold">{project.name}</h2>
-                          {project.website && <p className="text-xs text-gray-400">{project.website}</p>}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {availableToAdd.length > 0 && planInfo.totalAgents < planInfo.agentLimit && (
-                            <select
-                              onChange={(e) => {
-                                if (e.target.value) {
-                                  activateAgent(project.id, e.target.value);
-                                  e.target.value = "";
-                                }
-                              }}
-                              className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              defaultValue=""
-                            >
-                              <option value="" disabled>+ Add Agent</option>
-                              {availableToAdd.map((a) => (
-                                <option key={a.type} value={a.type}>{a.label}</option>
-                              ))}
-                            </select>
-                          )}
-                          <button
-                            onClick={() => deleteProject(project.id)}
-                            className="text-xs text-red-400 hover:text-red-600 cursor-pointer"
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-
-                      {projectAgents.length === 0 ? (
-                        <p className="text-sm text-gray-400 bg-white rounded-lg border border-gray-200 p-4">No agents assigned. Use the dropdown above to add agents.</p>
-                      ) : (
-                        <div className="space-y-3">
-                          {projectAgents.map((agent) => {
-                      const config = agent.config || {};
-                      const tasks = config.tasks || [];
-                      const blockers = config.blockers || [];
-                      const completedTasks = tasks.filter((t) => t.status === "completed").length;
-                      const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;
-                      const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
-
-                      return (
-                        <div
-                          key={agent.id}
-                          className="bg-white rounded-lg border border-gray-200 p-5"
-                        >
-                          {/* Header */}
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <h3 className="font-semibold text-sm">{agent.agent_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</h3>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {inProgressTasks > 0 || tasks.some((t) => t.status === "pending") ? (
-                                <button
-                                  onClick={() => runNextTask(agent.id)}
-                                  disabled={actionLoading}
-                                  className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer"
-                                >
-                                  Run Next
-                                </button>
-                              ) : null}
-                              {statusBadge(agent.status)}
-                              <button
-                                onClick={() => deactivateAgent(agent.id)}
-                                className="text-xs text-red-400 hover:text-red-600 cursor-pointer"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Plan */}
-                          {config.plan && (
-                            <div className="mb-3">
-                              <p className="text-xs font-medium text-gray-500 mb-1">Plan</p>
-                              <p className="text-sm text-gray-600">{config.plan}</p>
-                            </div>
-                          )}
-
-                          {/* Progress Bar */}
-                          {tasks.length > 0 && (
-                            <div className="mb-3">
-                              <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                <span className="font-medium">Execution Progress</span>
-                                <span>{completedTasks}/{tasks.length} tasks ({progress}%)</span>
-                              </div>
-                              <div className="w-full bg-gray-100 rounded-full h-2">
-                                <div
-                                  className="bg-blue-500 h-2 rounded-full transition-all"
-                                  style={{ width: `${Math.max(progress, inProgressTasks > 0 ? 8 : 0)}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Tasks */}
-                          {tasks.length > 0 && (
-                            <div className="mb-3">
-                              <p className="text-xs font-medium text-gray-500 mb-2">Tasks</p>
-                              <div className="space-y-1.5">
-                                {tasks.map((task, i) => (
-                                  <div key={i} className="flex items-start gap-2 text-xs">
-                                    <span className="mt-0.5 flex-shrink-0">
-                                      {task.status === "completed" ? (
-                                        <span className="text-green-500">&#10003;</span>
-                                      ) : task.status === "in_progress" ? (
-                                        <span className="text-blue-500">&#9679;</span>
-                                      ) : (
-                                        <span className="text-gray-300">&#9675;</span>
-                                      )}
-                                    </span>
-                                    <span className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}>
-                                      {task.name}
-                                    </span>
-                                    {(task.status === "in_progress" || task.status === "pending") && (
-                                      <button
-                                        onClick={() => executeTask(agent.id, i)}
-                                        disabled={actionLoading}
-                                        className="text-xs text-green-500 hover:text-green-700 font-medium whitespace-nowrap cursor-pointer"
-                                      >
-                                        Run
-                                      </button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Blockers */}
-                          {blockers.length > 0 && (
-                            <div className="bg-red-50 border border-red-100 rounded-md p-3">
-                              <p className="text-xs font-medium text-red-600 mb-1">Blockers</p>
-                              <ul className="text-xs text-red-500 space-y-1">
-                                {blockers.map((b, i) => (
-                                  <li key={i} className="flex items-center justify-between gap-2">
-                                    <div className="flex items-start gap-1.5">
-                                      <span className="mt-0.5 flex-shrink-0">!</span>
-                                      <span>{b}</span>
-                                    </div>
-                                    <button
-                                      onClick={() => resolveBlocker(agent.id, i, b)}
-                                      disabled={actionLoading}
-                                      className="text-xs text-blue-500 hover:text-blue-700 font-medium whitespace-nowrap cursor-pointer"
-                                    >
-                                      Resolve
-                                    </button>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-
-                {/* Reports */}
-                <h2 className="text-lg font-semibold mb-3">Reports</h2>
-                {reports.length === 0 ? (
-                  <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                    <p className="text-gray-500 mb-2">No agent reports yet</p>
-                    <p className="text-gray-400 text-sm">
-                      Reports will appear here once your AI agents start running.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {reports.map((report) => (
-                      <div
-                        key={report.id}
-                        className="bg-white rounded-lg border border-gray-200 p-5"
-                      >
-                        <div className="flex items-center justify-between mb-3">
-                          <h3 className="font-semibold text-sm">{report.agent}</h3>
-                          {statusBadge(report.status)}
-                        </div>
-                        <p className="text-xs text-gray-400 mb-2">{report.project}</p>
-                        <p className="text-gray-600 text-sm mb-3">
-                          {report.summary}
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {Object.entries(report.metrics).map(([key, value]) => (
-                            <div
-                              key={key}
-                              className="bg-gray-50 px-2.5 py-1.5 rounded text-xs"
-                            >
-                              <span className="text-gray-400">
-                                {key.replace(/_/g, " ")}:
-                              </span>{" "}
-                              <span className="font-medium text-gray-700">
-                                {value}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="text-gray-400 text-xs mt-3">
-                          {report.period} &middot; Last run:{" "}
-                          {new Date(report.last_run).toLocaleString()}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </>
-            )}
-          </section>
         )}
 
         {/* Billing Tab */}
