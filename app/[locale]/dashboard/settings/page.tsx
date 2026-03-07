@@ -63,13 +63,14 @@ export default function SettingsPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold">{ts.title}</h1>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            <Link href={`/${locale}/dashboard`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.chat}</Link>
-            <Link href={`/${locale}/dashboard/agents`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.agents}</Link>
-            <Link href={`/${locale}/dashboard/billing`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.billing}</Link>
-            <span className="px-4 py-2 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm">{tc.settings}</span>
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
+            <Link href={`/${locale}/dashboard`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
+            <Link href={`/${locale}/dashboard/agents`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.agents}</Link>
+            <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
+            <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
+            <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.settings}</span>
           </div>
         </div>
 

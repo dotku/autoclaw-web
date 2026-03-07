@@ -28,17 +28,6 @@ interface Project {
   created_at: string;
 }
 
-interface AgentReport {
-  id: string;
-  agent: string;
-  period: string;
-  summary: string;
-  metrics: Record<string, string | number>;
-  status: string;
-  project: string;
-  last_run: string;
-}
-
 function statusBadge(status: string | null) {
   const colors: Record<string, string> = {
     active: "bg-green-100 text-green-700",
@@ -71,7 +60,6 @@ export default function AgentsPage() {
 
   const { user, isLoading: userLoading } = useUser();
 
-  const [reports, setReports] = useState<AgentReport[]>([]);
   const [agents, setAgents] = useState<AgentAssignment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,7 +73,6 @@ export default function AgentsPage() {
       fetch("/api/reports").then((r) => r.json()),
       fetch("/api/projects").then((r) => r.json()),
     ]).then(([reportData, projectData]) => {
-      setReports(reportData.reports || []);
       setAgents(reportData.agents || []);
       setProjects(projectData.projects || []);
       setPlanInfo({
@@ -207,13 +194,14 @@ export default function AgentsPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold">{ta.title}</h1>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
-            <Link href={`/${locale}/dashboard`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.chat}</Link>
-            <span className="px-4 py-2 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm">{tc.agents}</span>
-            <Link href={`/${locale}/dashboard/billing`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.billing}</Link>
-            <Link href={`/${locale}/dashboard/settings`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.settings}</Link>
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
+            <Link href={`/${locale}/dashboard`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
+            <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.agents}</span>
+            <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
+            <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
+            <Link href={`/${locale}/dashboard/settings`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.settings}</Link>
           </div>
         </div>
 
@@ -221,7 +209,7 @@ export default function AgentsPage() {
           <p className="text-gray-500">{ta.loadingAgents}</p>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div className="text-sm text-gray-500">
                 <span className="font-medium text-gray-700 capitalize">{planInfo.plan}</span> {ta.plan} — {planInfo.totalAgents}/{planInfo.agentLimit === 999 ? ta.unlimited : planInfo.agentLimit} {ta.agentsUsed}
               </div>
@@ -259,12 +247,12 @@ export default function AgentsPage() {
 
               return (
                 <div key={project.id} className="mb-6">
-                  <div className="flex items-center justify-between mb-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                     <div>
                       <h2 className="text-base font-semibold">{project.name}</h2>
-                      {project.website && <p className="text-xs text-gray-400">{project.website}</p>}
+                      {project.website && <p className="text-xs text-gray-400 break-all">{project.website}</p>}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {availableToAdd.length > 0 && planInfo.totalAgents < planInfo.agentLimit && (
                         <select
                           onChange={(e) => { if (e.target.value) { activateAgent(project.id, e.target.value); e.target.value = ""; } }}
@@ -367,37 +355,6 @@ export default function AgentsPage() {
               );
             })}
 
-            <h2 className="text-lg font-semibold mb-3 mt-8">{ta.reports}</h2>
-            {reports.length === 0 ? (
-              <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                <p className="text-gray-500 mb-2">{ta.noReports}</p>
-                <p className="text-gray-400 text-sm">{ta.noReportsDesc}</p>
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                {reports.map((report) => (
-                  <div key={report.id} className="bg-white rounded-lg border border-gray-200 p-5">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="font-semibold text-sm">{report.agent}</h3>
-                      {statusBadge(report.status)}
-                    </div>
-                    <p className="text-xs text-gray-400 mb-2">{report.project}</p>
-                    <p className="text-gray-600 text-sm mb-3">{report.summary}</p>
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(report.metrics).map(([key, value]) => (
-                        <div key={key} className="bg-gray-50 px-2.5 py-1.5 rounded text-xs">
-                          <span className="text-gray-400">{key.replace(/_/g, " ")}:</span>{" "}
-                          <span className="font-medium text-gray-700">{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-gray-400 text-xs mt-3">
-                      {report.period} &middot; {ta.lastRun} {new Date(report.last_run).toLocaleString()}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
           </>
         )}
       </main>
