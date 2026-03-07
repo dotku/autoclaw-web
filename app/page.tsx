@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 const agents = [
   {
     icon: "M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75",
@@ -63,6 +65,145 @@ const caseStudies = [
     tag: "gpulaw",
   },
 ];
+
+function SignupForm() {
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setStatus("loading");
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    try {
+      const res = await fetch("/api/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.get("name"),
+          email: formData.get("email"),
+          company: formData.get("company"),
+          website: formData.get("website"),
+          agents: selectedAgents,
+          goals: formData.get("goals"),
+        }),
+      });
+      if (res.ok) {
+        setStatus("success");
+        form.reset();
+        setSelectedAgents([]);
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    }
+  };
+
+  const toggleAgent = (agent: string) => {
+    setSelectedAgents((prev) =>
+      prev.includes(agent) ? prev.filter((a) => a !== agent) : [...prev, agent]
+    );
+  };
+
+  if (status === "success") {
+    return (
+      <div className="bg-white/10 backdrop-blur rounded-xl p-8 text-center">
+        <div className="text-4xl mb-4">&#10003;</div>
+        <h3 className="text-xl font-bold text-white mb-2">You&apos;re registered!</h3>
+        <p className="text-gray-300">We&apos;ll reach out shortly to set up your AI marketing agents.</p>
+        <button
+          onClick={() => setStatus("idle")}
+          className="mt-6 text-blue-400 hover:underline text-sm"
+        >
+          Register another product
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white/10 backdrop-blur rounded-xl p-8 text-left">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Your Name</label>
+            <input
+              name="name"
+              type="text"
+              required
+              className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
+              placeholder="John Doe"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Email</label>
+            <input
+              name="email"
+              type="email"
+              required
+              className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
+              placeholder="you@company.com"
+            />
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Product / Company Name</label>
+          <input
+            name="company"
+            type="text"
+            className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
+            placeholder="Your product or company"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Website URL</label>
+          <input
+            name="website"
+            type="url"
+            className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
+            placeholder="https://yourproduct.com"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">What agents do you need?</label>
+          <div className="grid grid-cols-2 gap-2">
+            {["Email Outreach", "SEO & Content", "Lead Generation", "Social Media", "Product Management", "Sales Follow-up"].map((agent) => (
+              <label key={agent} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedAgents.includes(agent)}
+                  onChange={() => toggleAgent(agent)}
+                  className="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-400"
+                />
+                {agent}
+              </label>
+            ))}
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Tell us about your marketing goals</label>
+          <textarea
+            name="goals"
+            rows={3}
+            className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
+            placeholder="What are you trying to achieve? Who is your target audience?"
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={status === "loading"}
+          className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white py-3 rounded-lg font-medium transition-colors text-lg"
+        >
+          {status === "loading" ? "Registering..." : "Register My Product"}
+        </button>
+        {status === "error" && (
+          <p className="text-red-400 text-sm text-center">Something went wrong. Please try again.</p>
+        )}
+      </form>
+    </div>
+  );
+}
 
 const pricingPlans = [
   {
@@ -492,97 +633,7 @@ export default function Home() {
               marketing agents. Start with the free tier — no credit card
               required.
             </p>
-            <div className="bg-white/10 backdrop-blur rounded-xl p-8 text-left">
-              <form
-                onSubmit={(e) => e.preventDefault()}
-                className="space-y-4"
-              >
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Your Name
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
-                      placeholder="John Doe"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-1">
-                      Email
-                    </label>
-                    <input
-                      type="email"
-                      className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
-                      placeholder="you@company.com"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Product / Company Name
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
-                    placeholder="Your product or company"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Website URL
-                  </label>
-                  <input
-                    type="url"
-                    className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
-                    placeholder="https://yourproduct.com"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    What agents do you need?
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      "Email Outreach",
-                      "SEO & Content",
-                      "Lead Generation",
-                      "Social Media",
-                      "Product Management",
-                      "Sales Follow-up",
-                    ].map((agent) => (
-                      <label
-                        key={agent}
-                        className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer"
-                      >
-                        <input
-                          type="checkbox"
-                          className="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-400"
-                        />
-                        {agent}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-1">
-                    Tell us about your marketing goals
-                  </label>
-                  <textarea
-                    rows={3}
-                    className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400"
-                    placeholder="What are you trying to achieve? Who is your target audience?"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-medium transition-colors text-lg"
-                >
-                  Register My Product
-                </button>
-              </form>
-            </div>
+            <SignupForm />
             <p className="text-gray-400 text-sm mt-6">
               Questions? Email us at{" "}
               <a
@@ -657,6 +708,16 @@ export default function Home() {
                     className="hover:text-white transition-colors"
                   >
                     jytech.us
+                  </a>
+                </li>
+                <li>
+                  <a
+                    href="https://xpilot.jytech.us/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-white transition-colors"
+                  >
+                    xPilot — AI Social Media Copilot
                   </a>
                 </li>
               </ul>
