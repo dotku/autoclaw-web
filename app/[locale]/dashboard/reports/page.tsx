@@ -4,6 +4,9 @@ import { useUser } from "@auth0/nextjs-auth0/client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 
@@ -24,19 +27,57 @@ interface MetricsSummary {
   emailsFound: number;
   leadsGenerated: number;
   contentPublished: number;
-  socialPosts: number;
+  tasksCompleted: number;
 }
 
-function statusBadge(status: string | null) {
+const STATUS_LABELS: Record<string, Record<string, string>> = {
+  en: { active: "active", paused: "paused", completed: "completed", unknown: "unknown" },
+  zh: { active: "\u8fd0\u884c\u4e2d", paused: "\u5df2\u6682\u505c", completed: "\u5df2\u5b8c\u6210", unknown: "\u672a\u77e5" },
+};
+
+const CATEGORY_LABELS: Record<string, Record<string, string>> = {
+  en: {
+    engineering: "Engineering", lead_generation: "Lead Generation", email_marketing: "Email Marketing",
+    seo: "SEO", social_media: "Social Media", monitoring: "Monitoring", project_mgmt: "Project Mgmt",
+    product: "Product", marketing: "Marketing", sales: "Sales", advertising: "Advertising",
+    research: "Research", other: "Other",
+  },
+  zh: {
+    engineering: "\u5de5\u7a0b", lead_generation: "\u6f5c\u5ba2\u5f00\u53d1", email_marketing: "\u90ae\u4ef6\u8425\u9500",
+    seo: "SEO \u4f18\u5316", social_media: "\u793e\u4ea4\u5a92\u4f53", monitoring: "\u76d1\u63a7", project_mgmt: "\u9879\u76ee\u7ba1\u7406",
+    product: "\u4ea7\u54c1", marketing: "\u8425\u9500", sales: "\u9500\u552e", advertising: "\u5e7f\u544a",
+    research: "\u7814\u7a76", other: "\u5176\u4ed6",
+  },
+};
+
+const METRIC_LABELS: Record<string, Record<string, string>> = {
+  en: {
+    leads: "leads", emails_sent: "emails sent", contacts_found: "contacts found", tweets: "tweets",
+    posts_published: "posts published", articles: "articles", prs_created: "PRs created",
+    subscribers: "subscribers", crm_leads: "CRM leads", uptime_pct: "uptime %",
+    tasks_completed: "tasks completed", issues: "issues", duration_sec: "duration (s)", errors: "errors",
+    sales: "sales",
+  },
+  zh: {
+    leads: "\u6f5c\u5ba2", emails_sent: "\u5df2\u53d1\u90ae\u4ef6", contacts_found: "\u5df2\u627e\u5230\u8054\u7cfb\u4eba", tweets: "\u63a8\u6587",
+    posts_published: "\u5df2\u53d1\u5e03\u6587\u7ae0", articles: "\u6587\u7ae0", prs_created: "\u5df2\u521b\u5efa PR",
+    subscribers: "\u8ba2\u9605\u8005", crm_leads: "CRM \u6f5c\u5ba2", uptime_pct: "\u8fd0\u884c\u65f6\u95f4 %",
+    tasks_completed: "\u5df2\u5b8c\u6210\u4efb\u52a1", issues: "\u95ee\u9898", duration_sec: "\u8017\u65f6\uff08\u79d2\uff09", errors: "\u9519\u8bef",
+    sales: "\u9500\u552e",
+  },
+};
+
+function statusBadge(status: string | null, locale: string) {
   const colors: Record<string, string> = {
     active: "bg-green-100 text-green-700",
     paused: "bg-yellow-100 text-yellow-700",
     completed: "bg-blue-100 text-blue-700",
   };
   const s = status || "unknown";
+  const label = STATUS_LABELS[locale]?.[s] || STATUS_LABELS.en[s] || s;
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[s] || "bg-gray-100 text-gray-600"}`}>
-      {s}
+      {label}
     </span>
   );
 }
@@ -50,30 +91,41 @@ export default function ReportsPage() {
 
   const { user, isLoading: userLoading } = useUser();
   const [reports, setReports] = useState<AgentReport[]>([]);
+  const [brevoStats, setBrevoStats] = useState({ emailsSent: 0, delivered: 0, opened: 0, clicked: 0 });
+  const [gaStats, setGaStats] = useState({ totalUsers: 0, sessions: 0, pageViews: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    fetch("/api/reports")
+    fetch(`/api/reports?locale=${locale}`)
       .then((r) => r.json())
-      .then((data) => setReports(data.reports || []))
+      .then((data) => {
+        setReports(data.reports || []);
+        if (data.brevoStats) setBrevoStats(data.brevoStats);
+        if (data.gaStats) setGaStats(data.gaStats);
+      })
       .finally(() => setLoading(false));
-  }, [user]);
+  }, [user, locale]);
 
-  const metrics: MetricsSummary = reports.reduce(
+  const agentMetrics = reports.reduce(
     (acc, r) => {
       const m = r.metrics || {};
-      acc.totalTraffic += Number(m.traffic || m.visits || m.page_views || 0);
-      acc.emailsSent += Number(m.emails_sent || m.email_sent || 0);
-      acc.emailsFound += Number(m.emails_found || m.contacts_found || 0);
-      acc.leadsGenerated += Number(m.leads || m.leads_generated || m.prospects || 0);
-      acc.contentPublished += Number(m.articles || m.posts_published || m.content || 0);
-      acc.socialPosts += Number(m.social_posts || m.tweets || m.posts || 0);
+      acc.leadsGenerated += Number(m.leads || m.leads_generated || m.prospects || m.crm_leads || m.subscribers || 0);
+      acc.contentPublished += Number(m.articles || m.posts_published || m.content || m.prs_created || 0);
+      acc.tasksCompleted += Number(m.tasks_completed || m.issues || 0);
       return acc;
     },
-    { totalTraffic: 0, emailsSent: 0, emailsFound: 0, leadsGenerated: 0, contentPublished: 0, socialPosts: 0 }
+    { leadsGenerated: 0, contentPublished: 0, tasksCompleted: 0 }
   );
+  const metrics: MetricsSummary = {
+    totalTraffic: gaStats.pageViews,
+    emailsSent: brevoStats.emailsSent,
+    emailsFound: brevoStats.opened,
+    leadsGenerated: agentMetrics.leadsGenerated,
+    contentPublished: agentMetrics.contentPublished,
+    tasksCompleted: agentMetrics.tasksCompleted,
+  };
 
   if (userLoading) {
     return (
@@ -97,10 +149,10 @@ export default function ReportsPage() {
   const metricCards = [
     { label: tr.totalTraffic, value: metrics.totalTraffic, icon: "\u{1F4CA}", color: "bg-blue-50 text-blue-700 border-blue-200" },
     { label: tr.emailsSent, value: metrics.emailsSent, icon: "\u{1F4E7}", color: "bg-green-50 text-green-700 border-green-200" },
-    { label: tr.emailsFound, value: metrics.emailsFound, icon: "\u{1F50D}", color: "bg-purple-50 text-purple-700 border-purple-200" },
+    { label: tr.emailsOpened, value: metrics.emailsFound, icon: "\u{1F4EC}", color: "bg-purple-50 text-purple-700 border-purple-200" },
     { label: tr.leadsGenerated, value: metrics.leadsGenerated, icon: "\u{1F465}", color: "bg-orange-50 text-orange-700 border-orange-200" },
     { label: tr.contentPublished, value: metrics.contentPublished, icon: "\u{1F4DD}", color: "bg-teal-50 text-teal-700 border-teal-200" },
-    { label: tr.socialPosts, value: metrics.socialPosts, icon: "\u{1F4F1}", color: "bg-pink-50 text-pink-700 border-pink-200" },
+    { label: tr.tasksCompleted, value: metrics.tasksCompleted, icon: "\u2705", color: "bg-pink-50 text-pink-700 border-pink-200" },
   ];
 
   return (
@@ -160,22 +212,24 @@ export default function ReportsPage() {
                     <div key={report.id} className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                         <div className="flex items-center gap-2">
-                          <h3 className="font-semibold text-sm">{report.agent.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</h3>
-                          {statusBadge(report.status)}
+                          <h3 className="font-semibold text-sm">{report.agent.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</h3>
+                          {statusBadge(report.status, locale)}
                         </div>
                         <span className="text-xs text-gray-400">{report.project}</span>
                       </div>
-                      <p className="text-gray-600 text-sm mb-3">{report.summary}</p>
+                      <div className="prose prose-sm prose-gray max-w-none text-gray-600 mb-3 [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&_table]:text-xs [&_table]:border-collapse [&_th]:border [&_th]:border-gray-300 [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-50 [&_td]:border [&_td]:border-gray-200 [&_td]:px-2 [&_td]:py-1 [&_a]:text-blue-600 [&_a]:no-underline hover:[&_a]:underline">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{report.summary}</ReactMarkdown>
+                      </div>
                       <div className="flex flex-wrap gap-2 mb-3">
                         {Object.entries(report.metrics).map(([key, value]) => (
                           <div key={key} className="bg-gray-50 px-2.5 py-1.5 rounded text-xs">
-                            <span className="text-gray-400">{key.replace(/_/g, " ")}:</span>{" "}
+                            <span className="text-gray-400">{METRIC_LABELS[locale]?.[key] || METRIC_LABELS.en[key] || key.replace(/_/g, " ")}:</span>{" "}
                             <span className="font-medium text-gray-700">{value}</span>
                           </div>
                         ))}
                       </div>
                       <p className="text-gray-400 text-xs">
-                        {report.period} &middot; {tr.lastRun} {new Date(report.last_run).toLocaleString()}
+                        {CATEGORY_LABELS[locale]?.[report.period] || CATEGORY_LABELS.en[report.period] || report.period} &middot; {tr.lastRun} {new Date(report.last_run).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}
                       </p>
                     </div>
                   ))}

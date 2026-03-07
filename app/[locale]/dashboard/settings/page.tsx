@@ -113,6 +113,42 @@ export default function SettingsPage() {
             {saved && <span className="text-sm text-green-600">{ts.saved}</span>}
           </div>
         </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+          <h2 className="text-lg font-semibold mb-1">{ts.gaTitle}</h2>
+          <p className="text-sm text-gray-500 mb-4">{ts.gaDesc}</p>
+
+          <div className="bg-gray-50 rounded-lg border border-gray-200 p-4 space-y-3">
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-1">{ts.gaStep1}</p>
+              <p className="text-sm text-gray-500">{ts.gaStep1Desc}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-1">{ts.gaStep2}</p>
+              <p className="text-sm text-gray-500">{ts.gaStep2Desc}</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-1">{ts.gaStep3}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="bg-white border border-gray-300 rounded px-3 py-1.5 text-sm text-gray-800 select-all">
+                  autoclaw-analytics@jytech.iam.gserviceaccount.com
+                </code>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText("autoclaw-analytics@jytech.iam.gserviceaccount.com");
+                  }}
+                  className="text-xs text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                >
+                  {ts.copy}
+                </button>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-1">{ts.gaStep4}</p>
+              <p className="text-sm text-gray-500">{ts.gaStep4Desc}</p>
+            </div>
+          </div>
+        </div>
       </main>
     </div>
   );

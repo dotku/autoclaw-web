@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS projects (
   name VARCHAR(255) NOT NULL,
   website VARCHAR(500),
   description TEXT,
+  ga_property_id VARCHAR(20),
   created_at TIMESTAMP DEFAULT NOW()
 );
 
