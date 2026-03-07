@@ -24,6 +24,15 @@ const dictionaries = {
       run: "Run",
       resolve: "Resolve",
       save: "Save",
+      settings: "Settings",
+    },
+    settings: {
+      title: "Settings",
+      language: "Language",
+      languageDesc: "Select your preferred language for the interface.",
+      english: "English",
+      chinese: "Chinese (Simplified)",
+      saved: "Settings saved",
     },
     landing: {
       // Header
@@ -247,6 +256,15 @@ const dictionaries = {
       run: "\u8fd0\u884c",
       resolve: "\u89e3\u51b3",
       save: "\u4fdd\u5b58",
+      settings: "\u8bbe\u7f6e",
+    },
+    settings: {
+      title: "\u8bbe\u7f6e",
+      language: "\u8bed\u8a00",
+      languageDesc: "\u9009\u62e9\u754c\u9762\u663e\u793a\u8bed\u8a00\u3002",
+      english: "English",
+      chinese: "\u4e2d\u6587\uff08\u7b80\u4f53\uff09",
+      saved: "\u8bbe\u7f6e\u5df2\u4fdd\u5b58",
     },
     landing: {
       howItWorks: "\u5982\u4f55\u8fd0\u4f5c",

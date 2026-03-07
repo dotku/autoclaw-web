@@ -155,7 +155,7 @@ export default function DashboardPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{td.signInDashboard}</h1>
-          <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -195,6 +195,9 @@ export default function DashboardPage() {
             >
               {tc.billing}
             </button>
+            <Link href={`/${locale}/dashboard/settings`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">
+              {tc.settings}
+            </Link>
           </div>
         </div>
 

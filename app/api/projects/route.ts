@@ -11,78 +11,154 @@ const PLAN_AGENT_LIMITS: Record<string, number> = {
   enterprise: 999,
 };
 
-const AGENT_PLANS: Record<string, object> = {
-  email_marketing: {
-    plan: "Set up cold outreach campaign with personalized templates, build prospect email list, configure follow-up sequences, and launch newsletter.",
-    tasks: [
-      { name: "Research target audience & ICP", status: "in_progress" },
-      { name: "Build prospect email list (500+ contacts)", status: "pending" },
-      { name: "Create email templates (cold, follow-up, newsletter)", status: "pending" },
-      { name: "Configure sending schedule & limits", status: "pending" },
-      { name: "Set up tracking (opens, clicks, replies)", status: "pending" },
-      { name: "Launch first outreach campaign", status: "pending" },
-    ],
-    blockers: ["Need SMTP/email service credentials (SendGrid, Mailgun, etc.)", "Need target audience definition or ICP document"],
+const AGENT_PLANS: Record<string, Record<string, object>> = {
+  en: {
+    email_marketing: {
+      plan: "Set up cold outreach campaign with personalized templates, build prospect email list, configure follow-up sequences, and launch newsletter.",
+      tasks: [
+        { name: "Research target audience & ICP", status: "in_progress" },
+        { name: "Build prospect email list (500+ contacts)", status: "pending" },
+        { name: "Create email templates (cold, follow-up, newsletter)", status: "pending" },
+        { name: "Configure sending schedule & limits", status: "pending" },
+        { name: "Set up tracking (opens, clicks, replies)", status: "pending" },
+        { name: "Launch first outreach campaign", status: "pending" },
+      ],
+      blockers: ["Need SMTP/email service credentials (SendGrid, Mailgun, etc.)", "Need target audience definition or ICP document"],
+    },
+    seo_content: {
+      plan: "Audit existing website SEO, research high-value keywords, create content calendar, and produce optimized blog posts.",
+      tasks: [
+        { name: "Crawl website & audit current SEO health", status: "in_progress" },
+        { name: "Keyword research (50+ target keywords)", status: "pending" },
+        { name: "Competitor content analysis", status: "pending" },
+        { name: "Create monthly content calendar", status: "pending" },
+        { name: "Write first 3 SEO-optimized blog posts", status: "pending" },
+        { name: "Set up rank tracking & analytics", status: "pending" },
+      ],
+      blockers: ["Need website URL for site audit"],
+    },
+    lead_prospecting: {
+      plan: "Define ideal customer profile, build lead database from multiple sources, score and qualify leads, deliver enriched lead lists.",
+      tasks: [
+        { name: "Define ICP and qualification criteria", status: "in_progress" },
+        { name: "Set up data sources (LinkedIn, Apollo, etc.)", status: "pending" },
+        { name: "Build initial lead list (200+ leads)", status: "pending" },
+        { name: "Enrich leads with company & contact data", status: "pending" },
+        { name: "Score and prioritize leads", status: "pending" },
+        { name: "Deliver qualified lead report", status: "pending" },
+      ],
+      blockers: ["Need ideal customer profile (industry, company size, title)", "Need LinkedIn Sales Navigator or Apollo.io access"],
+    },
+    social_media: {
+      plan: "Set up brand social profiles, create content strategy, schedule posts, and engage with target audience on X/Twitter and LinkedIn.",
+      tasks: [
+        { name: "Audit existing social presence", status: "in_progress" },
+        { name: "Create brand voice & content guidelines", status: "pending" },
+        { name: "Build 2-week content queue (posts, threads)", status: "pending" },
+        { name: "Set up scheduling tool integration", status: "pending" },
+        { name: "Launch engagement campaign (likes, replies, follows)", status: "pending" },
+        { name: "Track follower growth & engagement metrics", status: "pending" },
+      ],
+      blockers: ["Need X/Twitter API credentials", "Need LinkedIn page admin access"],
+    },
+    product_manager: {
+      plan: "Monitor website health, analyze user behavior, track conversion funnels, and identify optimization opportunities.",
+      tasks: [
+        { name: "Set up website monitoring (uptime, speed)", status: "in_progress" },
+        { name: "Install analytics tracking", status: "pending" },
+        { name: "Map conversion funnels", status: "pending" },
+        { name: "Run initial UX audit", status: "pending" },
+        { name: "Identify top 5 conversion blockers", status: "pending" },
+        { name: "Create optimization roadmap", status: "pending" },
+      ],
+      blockers: ["Need website URL"],
+    },
+    sales_followup: {
+      plan: "Integrate with CRM, set up lead nurture sequences, automate follow-up reminders, and track deal pipeline.",
+      tasks: [
+        { name: "Connect to CRM (HubSpot, Salesforce, etc.)", status: "pending" },
+        { name: "Import existing leads & deals", status: "pending" },
+        { name: "Create follow-up email sequences", status: "pending" },
+        { name: "Set up automated reminders", status: "pending" },
+        { name: "Configure deal stage tracking", status: "pending" },
+        { name: "Launch first nurture campaign", status: "pending" },
+      ],
+      blockers: ["Need CRM API credentials", "Need current sales pipeline data"],
+    },
   },
-  seo_content: {
-    plan: "Audit existing website SEO, research high-value keywords, create content calendar, and produce optimized blog posts.",
-    tasks: [
-      { name: "Crawl website & audit current SEO health", status: "in_progress" },
-      { name: "Keyword research (50+ target keywords)", status: "pending" },
-      { name: "Competitor content analysis", status: "pending" },
-      { name: "Create monthly content calendar", status: "pending" },
-      { name: "Write first 3 SEO-optimized blog posts", status: "pending" },
-      { name: "Set up rank tracking & analytics", status: "pending" },
-    ],
-    blockers: ["Need website URL for site audit"],
-  },
-  lead_prospecting: {
-    plan: "Define ideal customer profile, build lead database from multiple sources, score and qualify leads, deliver enriched lead lists.",
-    tasks: [
-      { name: "Define ICP and qualification criteria", status: "in_progress" },
-      { name: "Set up data sources (LinkedIn, Apollo, etc.)", status: "pending" },
-      { name: "Build initial lead list (200+ leads)", status: "pending" },
-      { name: "Enrich leads with company & contact data", status: "pending" },
-      { name: "Score and prioritize leads", status: "pending" },
-      { name: "Deliver qualified lead report", status: "pending" },
-    ],
-    blockers: ["Need ideal customer profile (industry, company size, title)", "Need LinkedIn Sales Navigator or Apollo.io access"],
-  },
-  social_media: {
-    plan: "Set up brand social profiles, create content strategy, schedule posts, and engage with target audience on X/Twitter and LinkedIn.",
-    tasks: [
-      { name: "Audit existing social presence", status: "in_progress" },
-      { name: "Create brand voice & content guidelines", status: "pending" },
-      { name: "Build 2-week content queue (posts, threads)", status: "pending" },
-      { name: "Set up scheduling tool integration", status: "pending" },
-      { name: "Launch engagement campaign (likes, replies, follows)", status: "pending" },
-      { name: "Track follower growth & engagement metrics", status: "pending" },
-    ],
-    blockers: ["Need X/Twitter API credentials", "Need LinkedIn page admin access"],
-  },
-  product_manager: {
-    plan: "Monitor website health, analyze user behavior, track conversion funnels, and identify optimization opportunities.",
-    tasks: [
-      { name: "Set up website monitoring (uptime, speed)", status: "in_progress" },
-      { name: "Install analytics tracking", status: "pending" },
-      { name: "Map conversion funnels", status: "pending" },
-      { name: "Run initial UX audit", status: "pending" },
-      { name: "Identify top 5 conversion blockers", status: "pending" },
-      { name: "Create optimization roadmap", status: "pending" },
-    ],
-    blockers: ["Need website URL"],
-  },
-  sales_followup: {
-    plan: "Integrate with CRM, set up lead nurture sequences, automate follow-up reminders, and track deal pipeline.",
-    tasks: [
-      { name: "Connect to CRM (HubSpot, Salesforce, etc.)", status: "pending" },
-      { name: "Import existing leads & deals", status: "pending" },
-      { name: "Create follow-up email sequences", status: "pending" },
-      { name: "Set up automated reminders", status: "pending" },
-      { name: "Configure deal stage tracking", status: "pending" },
-      { name: "Launch first nurture campaign", status: "pending" },
-    ],
-    blockers: ["Need CRM API credentials", "Need current sales pipeline data"],
+  zh: {
+    email_marketing: {
+      plan: "\u8bbe\u7f6e\u4e2a\u6027\u5316\u6a21\u677f\u7684\u51b7\u90ae\u4ef6\u8425\u9500\u6d3b\u52a8\uff0c\u6784\u5efa\u6f5c\u5ba2\u90ae\u4ef6\u5217\u8868\uff0c\u914d\u7f6e\u8ddf\u8fdb\u5e8f\u5217\uff0c\u5e76\u53d1\u5e03\u901a\u8baf\u3002",
+      tasks: [
+        { name: "\u7814\u7a76\u76ee\u6807\u53d7\u4f17\u548c\u7406\u60f3\u5ba2\u6237\u753b\u50cf", status: "in_progress" },
+        { name: "\u6784\u5efa\u6f5c\u5ba2\u90ae\u4ef6\u5217\u8868\uff08500+ \u8054\u7cfb\u4eba\uff09", status: "pending" },
+        { name: "\u521b\u5efa\u90ae\u4ef6\u6a21\u677f\uff08\u51b7\u90ae\u4ef6\u3001\u8ddf\u8fdb\u3001\u901a\u8baf\uff09", status: "pending" },
+        { name: "\u914d\u7f6e\u53d1\u9001\u8ba1\u5212\u548c\u9650\u5236", status: "pending" },
+        { name: "\u8bbe\u7f6e\u8ddf\u8e2a\uff08\u6253\u5f00\u7387\u3001\u70b9\u51fb\u7387\u3001\u56de\u590d\u7387\uff09", status: "pending" },
+        { name: "\u53d1\u8d77\u9996\u6b21\u8425\u9500\u6d3b\u52a8", status: "pending" },
+      ],
+      blockers: ["\u9700\u8981 SMTP/\u90ae\u4ef6\u670d\u52a1\u51ed\u8bc1\uff08SendGrid\u3001Mailgun \u7b49\uff09", "\u9700\u8981\u76ee\u6807\u53d7\u4f17\u5b9a\u4e49\u6216\u7406\u60f3\u5ba2\u6237\u753b\u50cf\u6587\u6863"],
+    },
+    seo_content: {
+      plan: "\u5ba1\u8ba1\u73b0\u6709\u7f51\u7ad9 SEO\uff0c\u7814\u7a76\u9ad8\u4ef7\u503c\u5173\u952e\u8bcd\uff0c\u521b\u5efa\u5185\u5bb9\u65e5\u5386\uff0c\u5e76\u64b0\u5199\u4f18\u5316\u535a\u5ba2\u6587\u7ae0\u3002",
+      tasks: [
+        { name: "\u722c\u53d6\u7f51\u7ad9\u5e76\u5ba1\u8ba1\u5f53\u524d SEO \u72b6\u6001", status: "in_progress" },
+        { name: "\u5173\u952e\u8bcd\u7814\u7a76\uff0850+ \u76ee\u6807\u5173\u952e\u8bcd\uff09", status: "pending" },
+        { name: "\u7ade\u4e89\u5bf9\u624b\u5185\u5bb9\u5206\u6790", status: "pending" },
+        { name: "\u521b\u5efa\u6708\u5ea6\u5185\u5bb9\u65e5\u5386", status: "pending" },
+        { name: "\u64b0\u5199\u524d 3 \u7bc7 SEO \u4f18\u5316\u535a\u5ba2\u6587\u7ae0", status: "pending" },
+        { name: "\u8bbe\u7f6e\u6392\u540d\u8ddf\u8e2a\u548c\u5206\u6790", status: "pending" },
+      ],
+      blockers: ["\u9700\u8981\u7f51\u7ad9 URL \u8fdb\u884c\u7ad9\u70b9\u5ba1\u8ba1"],
+    },
+    lead_prospecting: {
+      plan: "\u5b9a\u4e49\u7406\u60f3\u5ba2\u6237\u753b\u50cf\uff0c\u4ece\u591a\u4e2a\u6765\u6e90\u6784\u5efa\u6f5c\u5ba2\u6570\u636e\u5e93\uff0c\u8bc4\u5206\u548c\u7b5b\u9009\u6f5c\u5ba2\uff0c\u4ea4\u4ed8\u4e30\u5bcc\u7684\u6f5c\u5ba2\u5217\u8868\u3002",
+      tasks: [
+        { name: "\u5b9a\u4e49\u7406\u60f3\u5ba2\u6237\u753b\u50cf\u548c\u7b5b\u9009\u6807\u51c6", status: "in_progress" },
+        { name: "\u8bbe\u7f6e\u6570\u636e\u6e90\uff08LinkedIn\u3001Apollo \u7b49\uff09", status: "pending" },
+        { name: "\u6784\u5efa\u521d\u59cb\u6f5c\u5ba2\u5217\u8868\uff08200+ \u6f5c\u5ba2\uff09", status: "pending" },
+        { name: "\u4e30\u5bcc\u6f5c\u5ba2\u516c\u53f8\u548c\u8054\u7cfb\u4eba\u6570\u636e", status: "pending" },
+        { name: "\u8bc4\u5206\u548c\u4f18\u5148\u6392\u5e8f\u6f5c\u5ba2", status: "pending" },
+        { name: "\u4ea4\u4ed8\u5408\u683c\u6f5c\u5ba2\u62a5\u544a", status: "pending" },
+      ],
+      blockers: ["\u9700\u8981\u7406\u60f3\u5ba2\u6237\u753b\u50cf\uff08\u884c\u4e1a\u3001\u516c\u53f8\u89c4\u6a21\u3001\u804c\u4f4d\uff09", "\u9700\u8981 LinkedIn Sales Navigator \u6216 Apollo.io \u8bbf\u95ee\u6743\u9650"],
+    },
+    social_media: {
+      plan: "\u8bbe\u7f6e\u54c1\u724c\u793e\u4ea4\u8d26\u53f7\uff0c\u521b\u5efa\u5185\u5bb9\u7b56\u7565\uff0c\u5b89\u6392\u53d1\u5e03\uff0c\u5e76\u5728 X/Twitter \u548c LinkedIn \u4e0a\u4e0e\u76ee\u6807\u53d7\u4f17\u4e92\u52a8\u3002",
+      tasks: [
+        { name: "\u5ba1\u8ba1\u73b0\u6709\u793e\u4ea4\u5a92\u4f53\u8868\u73b0", status: "in_progress" },
+        { name: "\u521b\u5efa\u54c1\u724c\u58f0\u97f3\u548c\u5185\u5bb9\u6307\u5357", status: "pending" },
+        { name: "\u6784\u5efa 2 \u5468\u5185\u5bb9\u961f\u5217\uff08\u5e16\u5b50\u3001\u4e3b\u9898\uff09", status: "pending" },
+        { name: "\u8bbe\u7f6e\u5b9a\u65f6\u53d1\u5e03\u5de5\u5177\u96c6\u6210", status: "pending" },
+        { name: "\u53d1\u8d77\u4e92\u52a8\u6d3b\u52a8\uff08\u70b9\u8d5e\u3001\u56de\u590d\u3001\u5173\u6ce8\uff09", status: "pending" },
+        { name: "\u8ddf\u8e2a\u7c89\u4e1d\u589e\u957f\u548c\u4e92\u52a8\u6307\u6807", status: "pending" },
+      ],
+      blockers: ["\u9700\u8981 X/Twitter API \u51ed\u8bc1", "\u9700\u8981 LinkedIn \u9875\u9762\u7ba1\u7406\u5458\u6743\u9650"],
+    },
+    product_manager: {
+      plan: "\u76d1\u63a7\u7f51\u7ad9\u5065\u5eb7\uff0c\u5206\u6790\u7528\u6237\u884c\u4e3a\uff0c\u8ddf\u8e2a\u8f6c\u5316\u6f0f\u6597\uff0c\u5e76\u8bc6\u522b\u4f18\u5316\u673a\u4f1a\u3002",
+      tasks: [
+        { name: "\u8bbe\u7f6e\u7f51\u7ad9\u76d1\u63a7\uff08\u8fd0\u884c\u65f6\u95f4\u3001\u901f\u5ea6\uff09", status: "in_progress" },
+        { name: "\u5b89\u88c5\u5206\u6790\u8ddf\u8e2a", status: "pending" },
+        { name: "\u6620\u5c04\u8f6c\u5316\u6f0f\u6597", status: "pending" },
+        { name: "\u8fdb\u884c\u521d\u59cb UX \u5ba1\u8ba1", status: "pending" },
+        { name: "\u8bc6\u522b\u524d 5 \u4e2a\u8f6c\u5316\u963b\u585e\u9879", status: "pending" },
+        { name: "\u521b\u5efa\u4f18\u5316\u8def\u7ebf\u56fe", status: "pending" },
+      ],
+      blockers: ["\u9700\u8981\u7f51\u7ad9 URL"],
+    },
+    sales_followup: {
+      plan: "\u96c6\u6210 CRM\uff0c\u8bbe\u7f6e\u6f5c\u5ba2\u57f9\u80b2\u5e8f\u5217\uff0c\u81ea\u52a8\u5316\u8ddf\u8fdb\u63d0\u9192\uff0c\u5e76\u8ddf\u8e2a\u4ea4\u6613\u7ba1\u9053\u3002",
+      tasks: [
+        { name: "\u8fde\u63a5 CRM\uff08HubSpot\u3001Salesforce \u7b49\uff09", status: "pending" },
+        { name: "\u5bfc\u5165\u73b0\u6709\u6f5c\u5ba2\u548c\u4ea4\u6613", status: "pending" },
+        { name: "\u521b\u5efa\u8ddf\u8fdb\u90ae\u4ef6\u5e8f\u5217", status: "pending" },
+        { name: "\u8bbe\u7f6e\u81ea\u52a8\u63d0\u9192", status: "pending" },
+        { name: "\u914d\u7f6e\u4ea4\u6613\u9636\u6bb5\u8ddf\u8e2a", status: "pending" },
+        { name: "\u53d1\u8d77\u9996\u6b21\u57f9\u80b2\u6d3b\u52a8", status: "pending" },
+      ],
+      blockers: ["\u9700\u8981 CRM API \u51ed\u8bc1", "\u9700\u8981\u5f53\u524d\u9500\u552e\u7ba1\u9053\u6570\u636e"],
+    },
   },
 };
 
@@ -165,7 +241,9 @@ export async function POST(req: NextRequest) {
     if (existing.length > 0) {
       return NextResponse.json({ error: "Agent already assigned" }, { status: 409 });
     }
-    const config = AGENT_PLANS[agent_type] || {};
+    const locale = body.locale === "zh" ? "zh" : "en";
+    const localePlans = AGENT_PLANS[locale] || AGENT_PLANS.en;
+    const config = localePlans[agent_type] || {};
     await sql`INSERT INTO agent_assignments (project_id, agent_type, status, config) VALUES (${project_id}, ${agent_type}, 'active', ${JSON.stringify(config)})`;
     return NextResponse.json({ success: true });
   }

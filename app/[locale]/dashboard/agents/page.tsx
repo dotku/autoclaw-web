@@ -116,7 +116,7 @@ export default function AgentsPage() {
   async function activateAgent(projectId: number, agentType: string) {
     setActionLoading(true);
     try {
-      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "activate_agent", project_id: projectId, agent_type: agentType }) });
+      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "activate_agent", project_id: projectId, agent_type: agentType, locale }) });
       const data = await res.json();
       if (!res.ok) alert(data.error);
       await loadData();
@@ -184,7 +184,7 @@ export default function AgentsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{ta.signInAgents}</h1>
-          <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -213,6 +213,7 @@ export default function AgentsPage() {
             <Link href={`/${locale}/dashboard`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.chat}</Link>
             <span className="px-4 py-2 rounded-md text-sm font-medium bg-white text-gray-900 shadow-sm">{tc.agents}</span>
             <Link href={`/${locale}/dashboard/billing`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.billing}</Link>
+            <Link href={`/${locale}/dashboard/settings`} className="px-4 py-2 rounded-md text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors">{tc.settings}</Link>
           </div>
         </div>
 
