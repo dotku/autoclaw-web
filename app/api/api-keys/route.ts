@@ -5,10 +5,9 @@ import { logAudit } from "@/lib/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { encrypt, decrypt, maskKey } from "@/lib/crypto";
 import { createHash, randomBytes } from "crypto";
+import { apiKeyActionSchema, parseOrError } from "@/lib/validations";
 
 export const dynamic = "force-dynamic";
-
-const ALLOWED_SERVICES = ["brevo", "apollo", "hunter", "openai"] as const;
 
 function getIp(req: NextRequest): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
@@ -106,20 +105,23 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = users[0].id;
+  const contentType = req.headers.get("content-type");
+  if (!contentType?.includes("application/json")) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
+
   const body = await req.json();
-  const { action } = body;
+
+  const parsed = parseOrError(apiKeyActionSchema, body);
+  if ("error" in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+  const { action } = parsed.data;
 
   // --- Existing service key actions ---
 
   if (action === "upsert") {
-    const { service, api_key, label } = body;
-
-    if (!service || !ALLOWED_SERVICES.includes(service)) {
-      return NextResponse.json({ error: "Invalid service" }, { status: 400 });
-    }
-    if (!api_key || typeof api_key !== "string" || api_key.trim().length < 8) {
-      return NextResponse.json({ error: "Invalid API key" }, { status: 400 });
-    }
+    const { service, api_key, label } = parsed.data as { service: string; api_key: string; label?: string | null; action: string };
 
     const encryptedKey = encrypt(api_key.trim());
 
@@ -144,11 +146,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "delete") {
-    const { service } = body;
-
-    if (!service) {
-      return NextResponse.json({ error: "Service required" }, { status: 400 });
-    }
+    const { service } = parsed.data as { service: string; action: string };
 
     await sql`DELETE FROM user_api_keys WHERE user_id = ${userId} AND service = ${service}`;
 
@@ -170,15 +168,8 @@ export async function POST(req: NextRequest) {
   if (action === "create") {
     await ensureApiKeysTable();
 
-    const { name, scopes, expires_at } = body;
-    const validScopes = ["read", "write", "admin"];
-    const keyScopes: string[] = Array.isArray(scopes)
-      ? scopes.filter((s: string) => validScopes.includes(s))
-      : ["read"];
-
-    if (keyScopes.length === 0) {
-      return NextResponse.json({ error: "At least one valid scope required" }, { status: 400 });
-    }
+    const { name, scopes, expires_at } = parsed.data as { name?: string | null; scopes?: string[]; expires_at?: string | null; action: string };
+    const keyScopes: string[] = Array.isArray(scopes) ? scopes : ["read"];
 
     // Generate key: ac_live_ + 32 random hex chars
     const rawKey = "ac_live_" + randomBytes(16).toString("hex");
@@ -213,10 +204,7 @@ export async function POST(req: NextRequest) {
   if (action === "revoke") {
     await ensureApiKeysTable();
 
-    const { key_id } = body;
-    if (!key_id) {
-      return NextResponse.json({ error: "key_id required" }, { status: 400 });
-    }
+    const { key_id } = parsed.data as { key_id: number; action: string };
 
     const existing = await sql`
       SELECT id FROM api_keys WHERE id = ${key_id} AND user_id = ${userId} AND revoked_at IS NULL

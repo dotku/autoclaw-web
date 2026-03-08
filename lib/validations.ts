@@ -130,6 +130,40 @@ export const inviteTeamMemberSchema = z.object({
   project_id: id,
 });
 
+// ── API Keys (BYOK) ──
+const allowedService = z.enum(["brevo", "apollo", "hunter", "openai"]);
+
+export const upsertApiKeySchema = z.object({
+  action: z.literal("upsert"),
+  service: allowedService,
+  api_key: z.string().min(8).max(500),
+  label: z.string().max(255).optional().nullable(),
+});
+
+export const deleteApiKeySchema = z.object({
+  action: z.literal("delete"),
+  service: allowedService,
+});
+
+export const createPlatformKeySchema = z.object({
+  action: z.literal("create"),
+  name: z.string().max(255).optional().nullable(),
+  scopes: z.array(z.enum(["read", "write", "admin"])).min(1).optional(),
+  expires_at: z.string().datetime().optional().nullable(),
+});
+
+export const revokePlatformKeySchema = z.object({
+  action: z.literal("revoke"),
+  key_id: z.number().int().positive(),
+});
+
+export const apiKeyActionSchema = z.discriminatedUnion("action", [
+  upsertApiKeySchema,
+  deleteApiKeySchema,
+  createPlatformKeySchema,
+  revokePlatformKeySchema,
+]);
+
 // ── Helper ──
 export function parseOrError<T>(schema: z.ZodSchema<T>, data: unknown): { data: T } | { error: string } {
   const result = schema.safeParse(data);
