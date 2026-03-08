@@ -3,6 +3,7 @@ import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { encrypt, decrypt, maskKey } from "@/lib/crypto";
 import { createHash, randomBytes } from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -55,14 +56,23 @@ export async function GET(req: NextRequest) {
   const userId = users[0].id;
 
   // Existing service keys (user_api_keys table)
-  const keys = await sql`
-    SELECT id, service, label,
-      CONCAT(LEFT(api_key, 4), '****', RIGHT(api_key, 4)) as masked_key,
-      updated_at
+  const rawKeys = await sql`
+    SELECT id, service, label, api_key, updated_at
     FROM user_api_keys
     WHERE user_id = ${userId}
     ORDER BY service ASC
   `;
+  const keys = rawKeys.map((k) => {
+    let masked_key = "****";
+    try {
+      masked_key = maskKey(decrypt(k.api_key as string));
+    } catch {
+      // Legacy plaintext key — mask directly
+      const raw = k.api_key as string;
+      masked_key = maskKey(raw);
+    }
+    return { id: k.id, service: k.service, label: k.label, masked_key, updated_at: k.updated_at };
+  });
 
   // Platform API keys (api_keys table)
   await ensureApiKeysTable();
@@ -111,11 +121,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid API key" }, { status: 400 });
     }
 
+    const encryptedKey = encrypt(api_key.trim());
+
     await sql`
       INSERT INTO user_api_keys (user_id, service, api_key, label, updated_at)
-      VALUES (${userId}, ${service}, ${api_key.trim()}, ${label || null}, NOW())
+      VALUES (${userId}, ${service}, ${encryptedKey}, ${label || null}, NOW())
       ON CONFLICT (user_id, service)
-      DO UPDATE SET api_key = ${api_key.trim()}, label = ${label || null}, updated_at = NOW()
+      DO UPDATE SET api_key = ${encryptedKey}, label = ${label || null}, updated_at = NOW()
     `;
 
     logAudit({
