@@ -111,8 +111,9 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href={`/${locale}`} className="text-xl font-bold tracking-tight">
-            <span className="text-blue-600">Auto</span>Claw
+          <Link href={`/${locale}`} className="text-xl font-bold tracking-tight flex items-center gap-2">
+            <img src="/logo.svg" alt="AutoClaw" className="w-7 h-7" />
+            <span><span className="text-blue-600">Auto</span>Claw</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link href={`/${locale}/dashboard`} className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.dashboard}</Link>

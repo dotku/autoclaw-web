@@ -21,6 +21,7 @@ export const metadata: Metadata = {
   title: "AutoClaw | AI Marketing Agents That Run 24/7",
   description:
     "Deploy AI-powered marketing agents that run 24/7. Email outreach, content creation, lead generation, SEO, and social media — all automated. Free tier available.",
+  icons: { icon: "/logo.svg" },
 };
 
 export function generateStaticParams() {
