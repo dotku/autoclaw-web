@@ -241,51 +241,56 @@ export async function GET(request: Request) {
 
       for (const propertyId of gaPropertyIds) {
         const projectName = propertyProjectMap[propertyId];
-        // Totals
-        const [response] = await analyticsClient.runReport({
-          property: `properties/${propertyId}`,
-          dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
-          metrics: [
-            { name: "totalUsers" },
-            { name: "sessions" },
-            { name: "screenPageViews" },
-          ],
-        });
-        if (response.rows?.[0]?.metricValues) {
-          const vals = response.rows[0].metricValues;
-          gaStats.totalUsers += Number(vals[0]?.value || 0);
-          gaStats.sessions += Number(vals[1]?.value || 0);
-          gaStats.pageViews += Number(vals[2]?.value || 0);
-        }
-        // Daily breakdown per project
-        const [dailyRes] = await analyticsClient.runReport({
-          property: `properties/${propertyId}`,
-          dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
-          dimensions: [{ name: "date" }],
-          metrics: [
-            { name: "totalUsers" },
-            { name: "sessions" },
-            { name: "screenPageViews" },
-          ],
-          orderBys: [{ dimension: { dimensionName: "date", orderType: "ALPHANUMERIC" } }],
-        });
-        const dailyData: { date: string; users: number; sessions: number; pageViews: number }[] = [];
-        for (const row of dailyRes.rows || []) {
-          const dateStr = row.dimensionValues?.[0]?.value || "";
-          const formatted = dateStr.length === 8
-            ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
-            : dateStr;
-          dailyData.push({
-            date: formatted,
-            users: Number(row.metricValues?.[0]?.value || 0),
-            sessions: Number(row.metricValues?.[1]?.value || 0),
-            pageViews: Number(row.metricValues?.[2]?.value || 0),
+        try {
+          // Totals
+          const [response] = await analyticsClient.runReport({
+            property: `properties/${propertyId}`,
+            dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+            metrics: [
+              { name: "totalUsers" },
+              { name: "sessions" },
+              { name: "screenPageViews" },
+            ],
           });
+          if (response.rows?.[0]?.metricValues) {
+            const vals = response.rows[0].metricValues;
+            gaStats.totalUsers += Number(vals[0]?.value || 0);
+            gaStats.sessions += Number(vals[1]?.value || 0);
+            gaStats.pageViews += Number(vals[2]?.value || 0);
+          }
+          // Daily breakdown per project
+          const [dailyRes] = await analyticsClient.runReport({
+            property: `properties/${propertyId}`,
+            dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+            dimensions: [{ name: "date" }],
+            metrics: [
+              { name: "totalUsers" },
+              { name: "sessions" },
+              { name: "screenPageViews" },
+            ],
+            orderBys: [{ dimension: { dimensionName: "date", orderType: "ALPHANUMERIC" } }],
+          });
+          const dailyData: { date: string; users: number; sessions: number; pageViews: number }[] = [];
+          for (const row of dailyRes.rows || []) {
+            const dateStr = row.dimensionValues?.[0]?.value || "";
+            const formatted = dateStr.length === 8
+              ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+              : dateStr;
+            dailyData.push({
+              date: formatted,
+              users: Number(row.metricValues?.[0]?.value || 0),
+              sessions: Number(row.metricValues?.[1]?.value || 0),
+              pageViews: Number(row.metricValues?.[2]?.value || 0),
+            });
+          }
+          gaProjects.push({ project: projectName, data: dailyData });
+        } catch (err) {
+          // Log per-property error but continue with other properties
+          console.error(`GA4 error for property ${propertyId} (${projectName}):`, err);
         }
-        gaProjects.push({ project: projectName, data: dailyData });
       }
     } catch {
-      // GA4 API unavailable — continue with defaults
+      // GA4 credentials invalid — continue with defaults
     }
   }
 

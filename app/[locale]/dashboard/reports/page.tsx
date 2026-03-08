@@ -42,14 +42,27 @@ interface MetricsSummary {
   tasksCompleted: number;
 }
 
-const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
-function TrafficChart({ data, locale, projectName, color }: { data: DailyTraffic[]; locale: string; projectName?: string; color?: string }) {
-  if (data.length === 0) return null;
+function CombinedTrafficChart({ projects, locale }: { projects: ProjectTraffic[]; locale: string }) {
+  if (projects.length === 0) return null;
 
-  const maxVal = Math.max(...data.map((d) => d.pageViews), 1);
+  // Build a unified date axis from all projects
+  const allDates = new Set<string>();
+  for (const p of projects) for (const d of p.data) allDates.add(d.date);
+  const dates = Array.from(allDates).sort();
+  if (dates.length === 0) return null;
+
+  // Build lookup per project: date → pageViews
+  const projectLines = projects.map((p, idx) => {
+    const lookup: Record<string, number> = {};
+    for (const d of p.data) lookup[d.date] = d.pageViews;
+    return { name: p.project, color: CHART_COLORS[idx % CHART_COLORS.length], lookup };
+  });
+
+  const maxVal = Math.max(...projects.flatMap((p) => p.data.map((d) => d.pageViews)), 1);
   const W = 700;
-  const H = 200;
+  const H = 220;
   const padL = 40;
   const padR = 10;
   const padT = 10;
@@ -57,41 +70,42 @@ function TrafficChart({ data, locale, projectName, color }: { data: DailyTraffic
   const chartW = W - padL - padR;
   const chartH = H - padT - padB;
 
-  const points = data.map((d, i) => ({
-    x: padL + (i / Math.max(data.length - 1, 1)) * chartW,
-    y: padT + chartH - (d.pageViews / maxVal) * chartH,
-    ...d,
-  }));
+  const xFor = (i: number) => padL + (i / Math.max(dates.length - 1, 1)) * chartW;
+  const yFor = (v: number) => padT + chartH - (v / maxVal) * chartH;
 
-  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
-  const areaPath = `${linePath} L${points[points.length - 1].x},${padT + chartH} L${points[0].x},${padT + chartH} Z`;
-
-  // Y-axis labels
   const yTicks = [0, Math.round(maxVal / 2), maxVal];
+  const step = Math.max(1, Math.floor(dates.length / 6));
+  const xLabelIndices = dates.map((_, i) => i).filter((i) => i % step === 0 || i === dates.length - 1);
 
-  // X-axis: show ~6 date labels
-  const step = Math.max(1, Math.floor(data.length / 6));
-  const xLabels = data.filter((_, i) => i % step === 0 || i === data.length - 1);
-
-  const lineColor = color || "#3b82f6";
-  const gradId = `trafficGrad_${(projectName || "default").replace(/\s/g, "_")}`;
-  const dateLabel = locale === "zh" ? "日期" : "Date";
-  const pvLabel = locale === "zh" ? "页面浏览" : "Page Views";
-  const chartTitle = projectName
-    ? `${projectName} — ${locale === "zh" ? "每日流量（近30天）" : "Daily Traffic (30d)"}`
-    : locale === "zh" ? "每日流量趋势（近30天）" : "Daily Traffic Trend (Last 30 Days)";
+  const pvLabel = locale === "zh" ? "\u9875\u9762\u6d4f\u89c8" : "Page Views";
+  const chartTitle = locale === "zh" ? "\u6bcf\u65e5\u6d41\u91cf\u8d8b\u52bf\uff08\u8fd130\u5929\uff09" : "Daily Traffic Trend (Last 30 Days)";
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5">
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
         <h3 className="font-semibold text-sm">{chartTitle}</h3>
-        <span className="text-xs text-gray-400">{pvLabel}</span>
+        <div className="flex flex-wrap gap-3">
+          {projectLines.map((pl) => (
+            <div key={pl.name} className="flex items-center gap-1.5">
+              <span className="inline-block w-3 h-[3px] rounded" style={{ backgroundColor: pl.color }} />
+              <span className="text-xs text-gray-500">{pl.name}</span>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[500px]" style={{ maxHeight: 220 }}>
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[500px]" style={{ maxHeight: 240 }}>
+          <defs>
+            {projectLines.map((pl) => (
+              <linearGradient key={pl.name} id={`grad_${pl.name.replace(/\s/g, "_")}`} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={pl.color} stopOpacity={0.25} />
+                <stop offset="100%" stopColor={pl.color} stopOpacity={0.03} />
+              </linearGradient>
+            ))}
+          </defs>
           {/* Grid lines */}
           {yTicks.map((tick) => {
-            const y = padT + chartH - (tick / maxVal) * chartH;
+            const y = yFor(tick);
             return (
               <g key={tick}>
                 <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="#e5e7eb" strokeWidth={0.5} />
@@ -99,34 +113,28 @@ function TrafficChart({ data, locale, projectName, color }: { data: DailyTraffic
               </g>
             );
           })}
-          {/* Area fill */}
-          <path d={areaPath} fill={`url(#${gradId})`} opacity={0.3} />
-          {/* Line */}
-          <path d={linePath} fill="none" stroke={lineColor} strokeWidth={2} />
-          {/* Dots */}
-          {points.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={lineColor} stroke="white" strokeWidth={1}>
-              <title>{`${p.date}: ${p.pageViews} ${pvLabel}`}</title>
-            </circle>
-          ))}
-          {/* X labels */}
-          {xLabels.map((d) => {
-            const idx = data.indexOf(d);
-            const x = padL + (idx / Math.max(data.length - 1, 1)) * chartW;
-            const label = d.date.slice(5); // MM-DD
+          {/* Per-project area + line + dots */}
+          {projectLines.map((pl) => {
+            const pts = dates.map((d, i) => ({ x: xFor(i), y: yFor(pl.lookup[d] || 0), val: pl.lookup[d] || 0, date: d }));
+            const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+            const areaPath = `${linePath} L${pts[pts.length - 1].x},${yFor(0)} L${pts[0].x},${yFor(0)} Z`;
+            const gradId = `grad_${pl.name.replace(/\s/g, "_")}`;
             return (
-              <text key={d.date} x={x} y={H - 5} textAnchor="middle" fontSize={9} fill="#9ca3af">{label}</text>
+              <g key={pl.name}>
+                <path d={areaPath} fill={`url(#${gradId})`} />
+                <path d={linePath} fill="none" stroke={pl.color} strokeWidth={2} />
+                {pts.map((p, i) => (
+                  <circle key={i} cx={p.x} cy={p.y} r={2} fill={pl.color} stroke="white" strokeWidth={0.8}>
+                    <title>{`${pl.name} · ${p.date}: ${p.val} ${pvLabel}`}</title>
+                  </circle>
+                ))}
+              </g>
             );
           })}
-          {/* Axis labels */}
-          <text x={padL} y={H - 5} textAnchor="start" fontSize={8} fill="#d1d5db">{dateLabel}</text>
-          {/* Gradient */}
-          <defs>
-            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={lineColor} stopOpacity={0.4} />
-              <stop offset="100%" stopColor={lineColor} stopOpacity={0.05} />
-            </linearGradient>
-          </defs>
+          {/* X labels */}
+          {xLabelIndices.map((i) => (
+            <text key={dates[i]} x={xFor(i)} y={H - 5} textAnchor="middle" fontSize={9} fill="#9ca3af">{dates[i].slice(5)}</text>
+          ))}
         </svg>
       </div>
     </div>
@@ -306,18 +314,8 @@ export default function ReportsPage() {
 
             {gaProjects.length > 0 && (
               <section className="mb-8">
-                <h2 className="text-lg font-semibold mb-4">{locale === "zh" ? "网站流量" : "Website Traffic"}</h2>
-                <div className="space-y-4">
-                  {gaProjects.map((gp, idx) => (
-                    <TrafficChart
-                      key={gp.project}
-                      data={gp.data}
-                      locale={locale}
-                      projectName={gp.project}
-                      color={CHART_COLORS[idx % CHART_COLORS.length]}
-                    />
-                  ))}
-                </div>
+                <h2 className="text-lg font-semibold mb-4">{locale === "zh" ? "\u7f51\u7ad9\u6d41\u91cf" : "Website Traffic"}</h2>
+                <CombinedTrafficChart projects={gaProjects} locale={locale} />
               </section>
             )}
 
