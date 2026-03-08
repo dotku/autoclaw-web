@@ -87,8 +87,8 @@ export default function DashboardPage() {
     <div className="h-screen bg-gray-50 flex flex-col overflow-hidden">
       <header className="bg-white border-b border-gray-200">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href={`/${locale}`} className="text-xl font-bold tracking-tight flex items-center gap-2">
-            <img src="/logo.svg" alt="AutoClaw" className="w-7 h-7" />
+          <Link href={`/${locale}`} className="text-2xl font-bold tracking-tight flex items-center gap-2">
+            <img src="/logo.svg" alt="AutoClaw" className="w-9 h-9" />
             <span><span className="text-red-600">Auto</span>Claw</span>
           </Link>
           <div className="flex items-center gap-4">

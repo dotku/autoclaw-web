@@ -165,8 +165,8 @@ export default function Home() {
       <header className="sticky top-0 z-50 bg-white/95 backdrop-blur border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <span className="text-xl font-bold tracking-tight flex items-center gap-2">
-              <img src="/logo.svg" alt="AutoClaw" className="w-8 h-8" />
+            <span className="text-2xl font-bold tracking-tight flex items-center gap-2">
+              <img src="/logo.svg" alt="AutoClaw" className="w-10 h-10" />
               <span><span className="text-primary">Auto</span>Claw</span>
             </span>
             <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
