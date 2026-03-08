@@ -6,8 +6,11 @@ import { type Locale } from "@/lib/i18n";
 export default function LanguageSwitcher({ locale }: { locale: Locale }) {
   const pathname = usePathname();
 
-  const switchTo = locale === "en" ? "zh" : "en";
-  const label = locale === "en" ? "中文" : "EN";
+  const localeOrder: Locale[] = ["en", "zh", "zh-TW", "fr"];
+  const labelMap: Record<Locale, string> = { en: "中文", zh: "繁體", "zh-TW": "FR", fr: "EN" };
+  const nextIndex = (localeOrder.indexOf(locale) + 1) % localeOrder.length;
+  const switchTo = localeOrder[nextIndex];
+  const label = labelMap[locale] || "EN";
 
   // Replace /en/... with /zh/... or vice versa
   const newPath = pathname.replace(`/${locale}`, `/${switchTo}`) || `/${switchTo}`;

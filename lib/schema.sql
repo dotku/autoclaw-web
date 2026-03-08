@@ -8,6 +8,23 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS organizations (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  domain VARCHAR(255),
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS organization_members (
+  id SERIAL PRIMARY KEY,
+  org_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  role VARCHAR(50) DEFAULT 'member',
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(org_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS projects (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id),
@@ -15,6 +32,8 @@ CREATE TABLE IF NOT EXISTS projects (
   website VARCHAR(500),
   description TEXT,
   ga_property_id VARCHAR(20),
+  domain VARCHAR(255),
+  org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -47,3 +66,19 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   agent_type VARCHAR(100),
   created_at TIMESTAMP DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS audit_logs (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id),
+  user_email VARCHAR(255),
+  action VARCHAR(100) NOT NULL,
+  resource_type VARCHAR(50),
+  resource_id INTEGER,
+  details JSONB DEFAULT '{}',
+  ip_address VARCHAR(45),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);

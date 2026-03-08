@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
+
+function getIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
 
 const PLAN_AGENT_LIMITS: Record<string, number> = {
   starter: 2,
@@ -163,7 +169,12 @@ const AGENT_PLANS: Record<string, Record<string, object>> = {
 };
 
 // GET: list user's projects with agent counts
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const ip = getIp(req);
+  if (!checkRateLimit(ip, { limit: 30, windowMs: 60_000 })) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const session = await auth0.getSession();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -183,16 +194,22 @@ export async function GET() {
   const agentLimit = PLAN_AGENT_LIMITS[plan] || 2;
   const isAdmin = role === "admin";
 
+  // Extract email domain for domain-based project sharing (enterprise feature)
+  const emailDomain = email.split("@")[1] || "";
   const projects = isAdmin
-    ? await sql`SELECT id, name, website, description, ga_property_id, created_at FROM projects ORDER BY created_at DESC`
-    : await sql`SELECT id, name, website, description, ga_property_id, created_at FROM projects WHERE user_id = ${userId} ORDER BY created_at DESC`;
+    ? await sql`SELECT id, name, website, description, ga_property_id, domain, org_id, created_at FROM projects ORDER BY created_at DESC`
+    : await sql`SELECT DISTINCT ON (id) id, name, website, description, ga_property_id, domain, org_id, created_at FROM projects WHERE user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}) OR org_id IN (SELECT org_id FROM organization_members WHERE user_id = ${userId}) ORDER BY id, created_at DESC`;
+  const projectIds = projects.map((p) => p.id);
   const totalAgents = isAdmin
     ? await sql`SELECT COUNT(*)::int as count FROM agent_assignments`
-    : await sql`SELECT COUNT(*)::int as count FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE p.user_id = ${userId}`;
+    : projectIds.length > 0
+      ? await sql`SELECT COUNT(*)::int as count FROM agent_assignments WHERE project_id = ANY(${projectIds})`
+      : [{ count: 0 }];
 
   return NextResponse.json({
     projects,
     plan,
+    role,
     agentLimit,
     totalAgents: totalAgents[0].count,
   });
@@ -200,6 +217,11 @@ export async function GET() {
 
 // POST: create project or manage agents
 export async function POST(req: NextRequest) {
+  const ip = getIp(req);
+  if (!checkRateLimit(ip, { limit: 20, windowMs: 60_000 })) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const session = await auth0.getSession();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -220,12 +242,16 @@ export async function POST(req: NextRequest) {
   const isAdmin = role === "admin";
   const agentLimit = isAdmin ? 999 : (PLAN_AGENT_LIMITS[plan] || 2);
 
+  // Extract email domain for domain-based access checks
+  const emailDomain = email.split("@")[1] || "";
+
   if (action === "create_project") {
-    const { name, website, description } = body;
+    const { name, website, description, domain } = body;
     if (!name) {
       return NextResponse.json({ error: "Project name is required" }, { status: 400 });
     }
-    const project = await sql`INSERT INTO projects (user_id, name, website, description) VALUES (${userId}, ${name}, ${website || ""}, ${description || ""}) RETURNING id, name, website, description, created_at`;
+    const project = await sql`INSERT INTO projects (user_id, name, website, description, domain) VALUES (${userId}, ${name}, ${website || ""}, ${description || ""}, ${domain || null}) RETURNING id, name, website, description, domain, created_at`;
+    logAudit({ userId, userEmail: email, action: "project.create", resourceType: "project", resourceId: project[0].id as number, details: { name }, ipAddress: getIp(req) });
     return NextResponse.json({ project: project[0] });
   }
 
@@ -237,7 +263,7 @@ export async function POST(req: NextRequest) {
     // Verify project ownership (admin can access all)
     const proj = isAdmin
       ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
-      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${userId}`;
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
@@ -257,6 +283,7 @@ export async function POST(req: NextRequest) {
     const localePlans = AGENT_PLANS[locale] || AGENT_PLANS.en;
     const config = localePlans[agent_type] || {};
     await sql`INSERT INTO agent_assignments (project_id, agent_type, status, config) VALUES (${project_id}, ${agent_type}, 'active', ${JSON.stringify(config)})`;
+    logAudit({ userId, userEmail: email, action: "agent.activate", resourceType: "agent", resourceId: project_id, details: { agent_type }, ipAddress: getIp(req) });
     return NextResponse.json({ success: true });
   }
 
@@ -265,11 +292,12 @@ export async function POST(req: NextRequest) {
     // Verify ownership (admin can access all)
     const agent = isAdmin
       ? await sql`SELECT aa.id FROM agent_assignments aa WHERE aa.id = ${agent_id}`
-      : await sql`SELECT aa.id FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
+      : await sql`SELECT aa.id FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
     await sql`DELETE FROM agent_assignments WHERE id = ${agent_id}`;
+    logAudit({ userId, userEmail: email, action: "agent.deactivate", resourceType: "agent", resourceId: agent_id, details: {}, ipAddress: getIp(req) });
     return NextResponse.json({ success: true });
   }
 
@@ -277,7 +305,7 @@ export async function POST(req: NextRequest) {
     const { agent_id, blocker_index, value } = body;
     const agent = isAdmin
       ? await sql`SELECT aa.id, aa.config FROM agent_assignments aa WHERE aa.id = ${agent_id}`
-      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
+      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -302,6 +330,7 @@ export async function POST(req: NextRequest) {
     }
     const updatedConfig = { ...config, blockers, tasks, ...(value ? { resolved_info: value } : {}) };
     await sql`UPDATE agent_assignments SET config = ${JSON.stringify(updatedConfig)} WHERE id = ${agent_id}`;
+    logAudit({ userId, userEmail: email, action: "blocker.resolve", resourceType: "agent", resourceId: agent_id, details: { blocker_index }, ipAddress: getIp(req) });
     return NextResponse.json({ success: true });
   }
 
@@ -309,25 +338,27 @@ export async function POST(req: NextRequest) {
     const { agent_id, config: newConfig } = body;
     const agent = isAdmin
       ? await sql`SELECT aa.id, aa.config FROM agent_assignments aa WHERE aa.id = ${agent_id}`
-      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
+      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
     const existingConfig = (agent[0].config as Record<string, unknown>) || {};
     const updatedConfig = { ...existingConfig, ...newConfig };
     await sql`UPDATE agent_assignments SET config = ${JSON.stringify(updatedConfig)} WHERE id = ${agent_id}`;
+    logAudit({ userId, userEmail: email, action: "agent.config_update", resourceType: "agent", resourceId: agent_id, details: {}, ipAddress: getIp(req) });
     return NextResponse.json({ success: true });
   }
 
   if (action === "update_project") {
-    const { project_id, website, ga_property_id, description } = body;
+    const { project_id, website, ga_property_id, description, domain } = body;
     const proj = isAdmin
       ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
-      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${userId}`;
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
-    await sql`UPDATE projects SET website = ${website ?? ""}, ga_property_id = ${ga_property_id ?? null}, description = ${description ?? ""} WHERE id = ${project_id}`;
+    await sql`UPDATE projects SET website = ${website ?? ""}, ga_property_id = ${ga_property_id ?? null}, description = ${description ?? ""}, domain = ${domain ?? null} WHERE id = ${project_id}`;
+    logAudit({ userId, userEmail: email, action: "project.update", resourceType: "project", resourceId: project_id, details: { website, ga_property_id }, ipAddress: getIp(req) });
     return NextResponse.json({ success: true });
   }
 
@@ -335,13 +366,14 @@ export async function POST(req: NextRequest) {
     const { project_id } = body;
     const proj = isAdmin
       ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
-      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${userId}`;
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
     await sql`DELETE FROM agent_assignments WHERE project_id = ${project_id}`;
     await sql`DELETE FROM chat_messages WHERE project_id = ${project_id}`;
     await sql`DELETE FROM projects WHERE id = ${project_id}`;
+    logAudit({ userId, userEmail: email, action: "project.delete", resourceType: "project", resourceId: project_id, details: {}, ipAddress: getIp(req) });
     return NextResponse.json({ success: true });
   }
 

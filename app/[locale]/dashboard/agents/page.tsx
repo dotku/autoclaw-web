@@ -28,9 +28,23 @@ interface Project {
   created_at: string;
 }
 
+interface ServerAgent {
+  id: string;
+  agent: string;
+  description?: string;
+  period: string;
+  status: string;
+  project: string;
+  last_run: string;
+  summary: string;
+  metrics: Record<string, string | number>;
+  enabled?: boolean;
+}
+
 function statusBadge(status: string | null) {
   const colors: Record<string, string> = {
     active: "bg-green-100 text-green-700",
+    pending: "bg-blue-100 text-blue-700",
     paused: "bg-yellow-100 text-yellow-700",
     completed: "bg-red-100 text-red-700",
   };
@@ -62,6 +76,7 @@ export default function AgentsPage() {
 
   const [agents, setAgents] = useState<AgentAssignment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [serverAgents, setServerAgents] = useState<ServerAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [planInfo, setPlanInfo] = useState({ plan: "starter", agentLimit: 2, totalAgents: 0 });
   const [showCreateProject, setShowCreateProject] = useState(false);
@@ -74,6 +89,7 @@ export default function AgentsPage() {
       fetch("/api/projects").then((r) => r.json()),
     ]).then(([reportData, projectData]) => {
       setAgents(reportData.agents || []);
+      setServerAgents(reportData.serverAgents || reportData.reports || []);
       setProjects(projectData.projects || []);
       setPlanInfo({
         plan: projectData.plan || "starter",
@@ -203,6 +219,7 @@ export default function AgentsPage() {
             <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
             <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
             <Link href={`/${locale}/dashboard/settings`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.settings}</Link>
+            <Link href={`/${locale}/dashboard/docs`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.docs}</Link>
           </div>
         </div>
 
@@ -355,6 +372,76 @@ export default function AgentsPage() {
                 </div>
               );
             })}
+
+            {/* Server Agents (OpenClaw cron jobs) */}
+            <section className="mt-8">
+              <div className="mb-4">
+                <h2 className="text-lg font-semibold">{ta.serverAgents}</h2>
+                <p className="text-xs text-gray-400 mt-1">{ta.serverAgentsDesc}</p>
+              </div>
+              {serverAgents.length === 0 ? (
+                <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+                  <p className="text-gray-500 text-sm">{ta.noServerAgents}</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {serverAgents.map((sa) => {
+                    const statusColors: Record<string, string> = {
+                      active: "bg-green-100 text-green-700",
+                      pending: "bg-blue-100 text-blue-700",
+                      paused: "bg-yellow-100 text-yellow-700",
+                      completed: "bg-gray-100 text-gray-600",
+                    };
+                    const categoryLabels: Record<string, Record<string, string>> = {
+                      en: { lead_generation: "Lead Gen", email_marketing: "Email", seo: "SEO", social_media: "Social", monitoring: "Monitor", project_mgmt: "PM", engineering: "Eng", sales: "Sales", other: "Other" },
+                      zh: { lead_generation: "潜在客户", email_marketing: "邮件", seo: "SEO", social_media: "社交", monitoring: "监控", project_mgmt: "项目", engineering: "工程", sales: "销售", other: "其他" },
+                    };
+                    const catLabel = categoryLabels[locale]?.[sa.period] || categoryLabels.en[sa.period] || sa.period;
+                    const metricEntries = Object.entries(sa.metrics || {}).filter(([, v]) => v !== 0 && v !== "0");
+                    const statusLabels: Record<string, Record<string, string>> = {
+                      en: { active: "active", pending: "pending", paused: "paused", completed: "completed" },
+                      zh: { active: "运行正常", pending: "待运行", paused: "已暂停", completed: "已完成" },
+                    };
+                    const metricLabels: Record<string, Record<string, string>> = {
+                      en: { emails_sent: "Sent", delivered: "Delivered", opened: "Opened", clicked: "Clicked", contacts_found: "Contacts", articles: "Articles", backlinks: "Backlinks", duration_sec: "Duration(s)", errors: "Errors" },
+                      zh: { emails_sent: "已发送", delivered: "已送达", opened: "已打开", clicked: "已点击", contacts_found: "联系人", articles: "文章", backlinks: "外链", duration_sec: "耗时(秒)", errors: "错误" },
+                    };
+                    return (
+                      <div key={sa.id} className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm truncate">{sa.agent.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[sa.status] || "bg-gray-100 text-gray-600"}`}>
+                                {statusLabels[locale]?.[sa.status] || sa.status}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                              <span>{sa.project}</span>
+                              <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{catLabel}</span>
+                              {sa.last_run ? <span>{ta.lastRunAt}: {new Date(sa.last_run).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</span> : <span className="italic">{locale === "zh" ? "等待首次运行" : "Awaiting first run"}</span>}
+                            </div>
+                          </div>
+                        </div>
+                        {sa.summary && (
+                          <p className="text-xs text-gray-500 mt-2">{sa.summary}</p>
+                        )}
+                        {metricEntries.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {metricEntries.map(([key, value]) => (
+                              <span key={key} className="bg-gray-50 px-2 py-1 rounded text-xs">
+                                <span className="text-gray-400">{metricLabels[locale]?.[key] || metricLabels.en[key] || key.replace(/_/g, " ")}:</span>{" "}
+                                <span className="font-medium text-gray-700">{typeof value === "number" ? value.toLocaleString() : value}</span>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
 
           </>
         )}

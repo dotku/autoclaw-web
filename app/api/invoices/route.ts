@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
+import { getDb } from "@/lib/db";
 import Stripe from "stripe";
 
 function getStripe() {
@@ -14,12 +15,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const email = session.user.email as string;
+
+  // Fetch user's plan from DB
+  const sql = getDb();
+  const users = await sql`SELECT plan, role FROM users WHERE email = ${email}`;
+  const userPlan = (users[0]?.plan as string) || "starter";
+
   const stripe = getStripe();
-  const email = session.user.email;
 
   const customers = await stripe.customers.list({ email, limit: 1 });
   if (customers.data.length === 0) {
-    return NextResponse.json({ invoices: [], subscriptions: [] });
+    return NextResponse.json({ invoices: [], subscriptions: [], userPlan });
   }
 
   const customer = customers.data[0];
@@ -52,5 +59,6 @@ export async function GET() {
       interval: sub.items.data[0]?.price?.recurring?.interval,
       cancel_at_period_end: sub.cancel_at_period_end,
     })),
+    userPlan,
   });
 }

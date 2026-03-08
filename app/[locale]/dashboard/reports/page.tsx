@@ -33,6 +33,18 @@ interface ProjectTraffic {
   data: DailyTraffic[];
 }
 
+interface BrevoCampaign {
+  id: number;
+  name: string;
+  status: string;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  project: string;
+  sentDate?: string;
+}
+
 interface MetricsSummary {
   totalTraffic: number;
   emailsSent: number;
@@ -78,8 +90,8 @@ function CombinedTrafficChart({ projects, locale, colorMap }: { projects: Projec
   const step = Math.max(1, Math.floor(dates.length / 6));
   const xLabelIndices = dates.map((_, i) => i).filter((i) => i % step === 0 || i === dates.length - 1);
 
-  const pvLabel = locale === "zh" ? "\u9875\u9762\u6d4f\u89c8" : "Page Views";
-  const chartTitle = locale === "zh" ? "\u6bcf\u65e5\u6d41\u91cf\u8d8b\u52bf\uff08\u8fd130\u5929\uff09" : "Daily Traffic Trend (Last 30 Days)";
+  const pvLabel = locale === "zh" ? "页面浏览" : "Page Views";
+  const chartTitle = locale === "zh" ? "每日流量趋势（近30天）" : "Daily Traffic Trend (Last 30 Days)";
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5">
@@ -143,8 +155,8 @@ function CombinedTrafficChart({ projects, locale, colorMap }: { projects: Projec
 }
 
 const STATUS_LABELS: Record<string, Record<string, string>> = {
-  en: { active: "active", paused: "paused", completed: "completed", unknown: "unknown" },
-  zh: { active: "\u8fd0\u884c\u4e2d", paused: "\u5df2\u6682\u505c", completed: "\u5df2\u5b8c\u6210", unknown: "\u672a\u77e5" },
+  en: { active: "active", pending: "pending", paused: "paused", completed: "completed", unknown: "unknown" },
+  zh: { active: "运行正常", pending: "待运行", paused: "已暂停", completed: "已完成", unknown: "未知" },
 };
 
 const CATEGORY_LABELS: Record<string, Record<string, string>> = {
@@ -155,10 +167,10 @@ const CATEGORY_LABELS: Record<string, Record<string, string>> = {
     research: "Research", other: "Other",
   },
   zh: {
-    engineering: "\u5de5\u7a0b", lead_generation: "\u6f5c\u5ba2\u5f00\u53d1", email_marketing: "\u90ae\u4ef6\u8425\u9500",
-    seo: "SEO \u4f18\u5316", social_media: "\u793e\u4ea4\u5a92\u4f53", monitoring: "\u76d1\u63a7", project_mgmt: "\u9879\u76ee\u7ba1\u7406",
-    product: "\u4ea7\u54c1", marketing: "\u8425\u9500", sales: "\u9500\u552e", advertising: "\u5e7f\u544a",
-    research: "\u7814\u7a76", other: "\u5176\u4ed6",
+    engineering: "工程", lead_generation: "潜在客户开发", email_marketing: "邮件营销",
+    seo: "SEO 优化", social_media: "社交媒体", monitoring: "监控", project_mgmt: "项目管理",
+    product: "产品", marketing: "营销", sales: "销售", advertising: "广告",
+    research: "研究", other: "其他",
   },
 };
 
@@ -171,11 +183,11 @@ const METRIC_LABELS: Record<string, Record<string, string>> = {
     sales: "sales",
   },
   zh: {
-    leads: "\u6f5c\u5ba2", emails_sent: "\u5df2\u53d1\u90ae\u4ef6", contacts_found: "\u5df2\u627e\u5230\u8054\u7cfb\u4eba", tweets: "\u63a8\u6587",
-    posts_published: "\u5df2\u53d1\u5e03\u6587\u7ae0", articles: "\u6587\u7ae0", prs_created: "\u5df2\u521b\u5efa PR",
-    subscribers: "\u8ba2\u9605\u8005", crm_leads: "CRM \u6f5c\u5ba2", uptime_pct: "\u8fd0\u884c\u65f6\u95f4 %",
-    tasks_completed: "\u5df2\u5b8c\u6210\u4efb\u52a1", issues: "\u95ee\u9898", duration_sec: "\u8017\u65f6\uff08\u79d2\uff09", errors: "\u9519\u8bef",
-    sales: "\u9500\u552e",
+    leads: "潜在客户", emails_sent: "已发邮件", contacts_found: "已找到联系人", tweets: "推文",
+    posts_published: "已发布文章", articles: "文章", prs_created: "已创建 PR",
+    subscribers: "订阅者", crm_leads: "CRM 潜在客户", uptime_pct: "运行时间 %",
+    tasks_completed: "已完成任务", issues: "问题", duration_sec: "耗时（秒）", errors: "错误",
+    sales: "销售",
   },
 };
 
@@ -204,6 +216,7 @@ export default function ReportsPage() {
   const { user, isLoading: userLoading } = useUser();
   const [reports, setReports] = useState<AgentReport[]>([]);
   const [brevoStats, setBrevoStats] = useState({ emailsSent: 0, delivered: 0, opened: 0, clicked: 0 });
+  const [brevoCampaigns, setBrevoCampaigns] = useState<BrevoCampaign[]>([]);
   const [gaStats, setGaStats] = useState({ totalUsers: 0, sessions: 0, pageViews: 0 });
   const [gaProjects, setGaProjects] = useState<ProjectTraffic[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
@@ -217,6 +230,7 @@ export default function ReportsPage() {
       .then((data) => {
         setReports(data.reports || []);
         if (data.brevoStats) setBrevoStats(data.brevoStats);
+        if (data.brevoCampaigns) setBrevoCampaigns(data.brevoCampaigns);
         if (data.gaStats) setGaStats(data.gaStats);
         if (data.gaProjects) {
           setGaProjects(data.gaProjects);
@@ -266,12 +280,12 @@ export default function ReportsPage() {
   }
 
   const metricCards = [
-    { label: tr.totalTraffic, value: metrics.totalTraffic, icon: "\u{1F4CA}", color: "bg-red-50 text-red-700 border-red-200" },
-    { label: tr.emailsSent, value: metrics.emailsSent, icon: "\u{1F4E7}", color: "bg-green-50 text-green-700 border-green-200" },
-    { label: tr.emailsOpened, value: metrics.emailsFound, icon: "\u{1F4EC}", color: "bg-purple-50 text-purple-700 border-purple-200" },
-    { label: tr.leadsGenerated, value: metrics.leadsGenerated, icon: "\u{1F465}", color: "bg-orange-50 text-orange-700 border-orange-200" },
-    { label: tr.contentPublished, value: metrics.contentPublished, icon: "\u{1F4DD}", color: "bg-teal-50 text-teal-700 border-teal-200" },
-    { label: tr.tasksCompleted, value: metrics.tasksCompleted, icon: "\u2705", color: "bg-pink-50 text-pink-700 border-pink-200" },
+    { label: tr.totalTraffic, value: metrics.totalTraffic, icon: "📊", color: "bg-red-50 text-red-700 border-red-200" },
+    { label: tr.emailsSent, value: metrics.emailsSent, icon: "📧", color: "bg-green-50 text-green-700 border-green-200" },
+    { label: tr.emailsOpened, value: metrics.emailsFound, icon: "📬", color: "bg-purple-50 text-purple-700 border-purple-200" },
+    { label: tr.leadsGenerated, value: metrics.leadsGenerated, icon: "👥", color: "bg-orange-50 text-orange-700 border-orange-200" },
+    { label: tr.contentPublished, value: metrics.contentPublished, icon: "📝", color: "bg-teal-50 text-teal-700 border-teal-200" },
+    { label: tr.tasksCompleted, value: metrics.tasksCompleted, icon: "✅", color: "bg-pink-50 text-pink-700 border-pink-200" },
   ];
 
   return (
@@ -299,6 +313,7 @@ export default function ReportsPage() {
             <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.reports}</span>
             <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
             <Link href={`/${locale}/dashboard/settings`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.settings}</Link>
+            <Link href={`/${locale}/dashboard/docs`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.docs}</Link>
           </div>
         </div>
 
@@ -322,7 +337,7 @@ export default function ReportsPage() {
             {gaProjects.length > 0 && (
               <section className="mb-8">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                  <h2 className="text-lg font-semibold">{locale === "zh" ? "\u7f51\u7ad9\u6d41\u91cf" : "Website Traffic"}</h2>
+                  <h2 className="text-lg font-semibold">{locale === "zh" ? "网站流量" : "Website Traffic"}</h2>
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => {
@@ -338,7 +353,7 @@ export default function ReportsPage() {
                           : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
                       }`}
                     >
-                      {locale === "zh" ? "\u5168\u90e8" : "All"}
+                      {locale === "zh" ? "全部" : "All"}
                     </button>
                     {gaProjects.map((p, idx) => {
                       const color = CHART_COLORS[idx % CHART_COLORS.length];
@@ -373,6 +388,65 @@ export default function ReportsPage() {
                   locale={locale}
                   colorMap={Object.fromEntries(gaProjects.map((p, i) => [p.project, CHART_COLORS[i % CHART_COLORS.length]]))}
                 />
+              </section>
+            )}
+
+            {brevoCampaigns.length > 0 && (
+              <section className="mb-8">
+                <h2 className="text-lg font-semibold mb-4">{tr.campaigns}</h2>
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left px-4 py-3 font-medium text-gray-600">{locale === "zh" ? "活动名称" : "Campaign"}</th>
+                          <th className="text-left px-3 py-3 font-medium text-gray-600">{tr.project}</th>
+                          <th className="text-center px-3 py-3 font-medium text-gray-600">{tr.campaignStatus}</th>
+                          <th className="text-right px-3 py-3 font-medium text-gray-600">{tr.campaignSent}</th>
+                          <th className="text-right px-3 py-3 font-medium text-gray-600">{tr.campaignOpened}</th>
+                          <th className="text-right px-3 py-3 font-medium text-gray-600">{tr.openRate}</th>
+                          <th className="text-right px-3 py-3 font-medium text-gray-600">{tr.campaignClicked}</th>
+                          <th className="text-right px-3 py-3 font-medium text-gray-600">{tr.clickRate}</th>
+                          <th className="text-right px-4 py-3 font-medium text-gray-600">{tr.campaignDate}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {brevoCampaigns.map((c) => {
+                          const openRate = c.delivered > 0 ? ((c.opened / c.delivered) * 100).toFixed(1) : "0.0";
+                          const clickRate = c.delivered > 0 ? ((c.clicked / c.delivered) * 100).toFixed(1) : "0.0";
+                          const statusColors: Record<string, string> = {
+                            sent: "bg-green-100 text-green-700",
+                            draft: "bg-gray-100 text-gray-600",
+                            queued: "bg-blue-100 text-blue-700",
+                            suspended: "bg-yellow-100 text-yellow-700",
+                            archive: "bg-gray-100 text-gray-500",
+                          };
+                          const statusLabel = c.status === "sent" ? (locale === "zh" ? "已发送" : "Sent")
+                            : c.status === "draft" ? (locale === "zh" ? "草稿" : "Draft")
+                            : c.status === "queued" ? (locale === "zh" ? "排队中" : "Queued")
+                            : c.status;
+                          return (
+                            <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
+                              <td className="px-4 py-3 font-medium text-gray-800 max-w-[200px] truncate" title={c.name}>{c.name}</td>
+                              <td className="px-3 py-3 text-xs text-gray-500">{c.project}</td>
+                              <td className="px-3 py-3 text-center">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[c.status] || "bg-gray-100 text-gray-600"}`}>{statusLabel}</span>
+                              </td>
+                              <td className="px-3 py-3 text-right tabular-nums">{c.sent.toLocaleString()}</td>
+                              <td className="px-3 py-3 text-right tabular-nums">{c.opened.toLocaleString()}</td>
+                              <td className="px-3 py-3 text-right tabular-nums text-green-600 font-medium">{openRate}%</td>
+                              <td className="px-3 py-3 text-right tabular-nums">{c.clicked.toLocaleString()}</td>
+                              <td className="px-3 py-3 text-right tabular-nums text-blue-600 font-medium">{clickRate}%</td>
+                              <td className="px-4 py-3 text-right text-gray-500 text-xs">
+                                {c.sentDate ? new Date(c.sentDate).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US") : "-"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </section>
             )}
 

@@ -77,6 +77,7 @@ export default function BillingPage() {
   const { user, isLoading: userLoading } = useUser();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [userPlan, setUserPlan] = useState<string>("starter");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -87,6 +88,7 @@ export default function BillingPage() {
       .then((data) => {
         setInvoices(data.invoices || []);
         setSubscriptions(data.subscriptions || []);
+        if (data.userPlan) setUserPlan(data.userPlan);
       })
       .finally(() => setLoading(false));
   }, [user]);
@@ -135,6 +137,7 @@ export default function BillingPage() {
             <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
             <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.billing}</span>
             <Link href={`/${locale}/dashboard/settings`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.settings}</Link>
+            <Link href={`/${locale}/dashboard/docs`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.docs}</Link>
           </div>
         </div>
 
@@ -145,10 +148,25 @@ export default function BillingPage() {
             <section className="mb-8">
               <h2 className="text-lg font-semibold mb-4">{td.activeSubscriptions}</h2>
               {subscriptions.length === 0 ? (
-                <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
-                  <p className="text-gray-500 mb-4">{td.noSubscriptions}</p>
-                  <Link href={`/${locale}#pricing`} className="text-red-600 hover:underline text-sm font-medium">{td.viewPlans}</Link>
-                </div>
+                userPlan === "enterprise" || userPlan === "scale" || userPlan === "growth" ? (
+                  <div className="bg-white rounded-lg border border-gray-200 p-6">
+                    <div className="flex items-center gap-3 mb-3">
+                      <h3 className="font-semibold text-lg">
+                        {userPlan === "enterprise" ? td.enterprisePlan : userPlan === "scale" ? td.scalePlan : td.growthPlan}
+                      </h3>
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">active</span>
+                    </div>
+                    <p className="text-gray-500 text-sm mb-2">
+                      {userPlan === "enterprise" ? td.enterprisePlanDesc : td.managedBilling}
+                    </p>
+                    <p className="text-gray-400 text-xs">{td.managedBilling}</p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+                    <p className="text-gray-500 mb-4">{td.noSubscriptions}</p>
+                    <Link href={`/${locale}#pricing`} className="text-red-600 hover:underline text-sm font-medium">{td.viewPlans}</Link>
+                  </div>
+                )
               ) : (
                 <div className="grid gap-4">
                   {subscriptions.map((sub) => (
