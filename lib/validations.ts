@@ -43,7 +43,7 @@ export const resolveBlockerSchema = z.object({
 export const updateAgentConfigSchema = z.object({
   action: z.literal("update_agent_config"),
   agent_id: id,
-  config: z.record(z.unknown()),
+  config: z.record(z.string(), z.unknown()),
 });
 
 export const updateProjectSchema = z.object({

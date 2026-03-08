@@ -4,6 +4,17 @@ import { logAudit } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 
 export const auth0 = new Auth0Client({
+  // Session security settings (SOC 2)
+  session: {
+    rolling: true,                // Extend session on activity
+    absoluteDuration: 28800,      // 8 hours max session lifetime
+    inactivityDuration: 3600,     // 1 hour inactivity timeout
+    cookie: {
+      sameSite: "lax",            // CSRF protection
+      secure: process.env.NODE_ENV === "production",
+    },
+  },
+
   async onCallback(error, ctx, session) {
     if (error || !session) {
       const base = ctx.appBaseUrl || "http://localhost:3000";
