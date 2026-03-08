@@ -63,6 +63,8 @@ const ACTION_LABELS: Record<string, Record<string, string>> = {
     "org.update_role": "Update Member Role",
     "org.rename": "Rename Organization",
     "org.delete": "Delete Organization",
+    "apikey.upsert": "Save API Key",
+    "apikey.delete": "Delete API Key",
   },
   zh: {
     "login": "登录",
@@ -83,6 +85,8 @@ const ACTION_LABELS: Record<string, Record<string, string>> = {
     "org.update_role": "更新成员角色",
     "org.rename": "重命名组织",
     "org.delete": "删除组织",
+    "apikey.upsert": "保存 API 密钥",
+    "apikey.delete": "删除 API 密钥",
   },
   "zh-TW": {
     "login": "登入",
@@ -103,6 +107,8 @@ const ACTION_LABELS: Record<string, Record<string, string>> = {
     "org.update_role": "更新成員角色",
     "org.rename": "重新命名組織",
     "org.delete": "刪除組織",
+    "apikey.upsert": "儲存 API 金鑰",
+    "apikey.delete": "刪除 API 金鑰",
   },
   fr: {
     "login": "Connexion",
@@ -123,6 +129,8 @@ const ACTION_LABELS: Record<string, Record<string, string>> = {
     "org.update_role": "Modifier le rôle",
     "org.rename": "Renommer l'organisation",
     "org.delete": "Supprimer l'organisation",
+    "apikey.upsert": "Enregistrer la clé API",
+    "apikey.delete": "Supprimer la clé API",
   },
 };
 
@@ -162,6 +170,12 @@ export default function SettingsPage() {
   const [renamingOrgId, setRenamingOrgId] = useState<number | null>(null);
   const [renameOrgName, setRenameOrgName] = useState("");
   const [userRole, setUserRole] = useState<string>("user");
+  const [apiKeys, setApiKeys] = useState<{ id: number; service: string; masked_key: string; label: string | null; updated_at: string }[]>([]);
+  const [byokEditing, setByokEditing] = useState<string | null>(null);
+  const [byokKeyInput, setByokKeyInput] = useState("");
+  const [byokLabelInput, setByokLabelInput] = useState("");
+  const [byokSaving, setByokSaving] = useState(false);
+  const [byokMsg, setByokMsg] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -183,6 +197,9 @@ export default function SettingsPage() {
         setOrgs(orgList);
         orgList.forEach((org: Org) => loadOrgMembers(org.id));
       });
+    fetch("/api/api-keys")
+      .then((r) => r.json())
+      .then((data) => setApiKeys(data.keys || []));
   }, [user]);
 
   function loadOrgMembers(orgId: number) {
@@ -951,6 +968,129 @@ export default function SettingsPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* API Keys (BYOK) */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-1">{ts.byokTitle}</h2>
+          <p className="text-sm text-gray-500 mb-4">{ts.byokDesc}</p>
+
+          <div className="space-y-3">
+            {([
+              { service: "brevo", name: ts.byokBravo, hint: ts.byokBrevoHint },
+              { service: "apollo", name: ts.byokApollo, hint: ts.byokApolloHint },
+              { service: "hunter", name: ts.byokHunter, hint: ts.byokHunterHint },
+              { service: "openai", name: ts.byokOpenai, hint: ts.byokOpenaiHint },
+            ] as const).map((svc) => {
+              const existing = apiKeys.find((k) => k.service === svc.service);
+              const isEditing = byokEditing === svc.service;
+
+              return (
+                <div key={svc.service} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">{svc.name}</h3>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${existing ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-500"}`}>
+                        {existing ? ts.byokMasked : ts.byokNotSet}
+                      </span>
+                    </div>
+                    {!isEditing && (
+                      <button
+                        onClick={() => {
+                          setByokEditing(svc.service);
+                          setByokKeyInput("");
+                          setByokLabelInput(existing?.label || "");
+                        }}
+                        className="text-xs text-red-600 hover:text-red-800 transition-colors cursor-pointer"
+                      >
+                        {existing ? ts.edit : ts.byokSave}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mb-2">{svc.hint}</p>
+
+                  {existing && !isEditing && (
+                    <p className="text-sm text-gray-600 font-mono">{existing.masked_key}</p>
+                  )}
+
+                  {isEditing && (
+                    <div className="space-y-2 mt-2">
+                      <input
+                        type="password"
+                        value={byokKeyInput}
+                        onChange={(e) => setByokKeyInput(e.target.value)}
+                        placeholder={ts.byokPlaceholder}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none font-mono"
+                        autoFocus
+                      />
+                      <input
+                        type="text"
+                        value={byokLabelInput}
+                        onChange={(e) => setByokLabelInput(e.target.value)}
+                        placeholder={ts.byokLabel}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            if (!byokKeyInput) return;
+                            setByokSaving(true);
+                            try {
+                              const res = await fetch("/api/api-keys", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "upsert", service: svc.service, api_key: byokKeyInput, label: byokLabelInput || null }),
+                              });
+                              if (res.ok) {
+                                setByokMsg(ts.byokSaved);
+                                setByokEditing(null);
+                                setByokKeyInput("");
+                                const data = await fetch("/api/api-keys").then((r) => r.json());
+                                setApiKeys(data.keys || []);
+                              }
+                            } finally {
+                              setByokSaving(false);
+                              setTimeout(() => setByokMsg(""), 3000);
+                            }
+                          }}
+                          disabled={byokSaving || !byokKeyInput}
+                          className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {byokSaving ? "..." : ts.byokSave}
+                        </button>
+                        <button
+                          onClick={() => setByokEditing(null)}
+                          className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 transition-colors cursor-pointer"
+                        >
+                          {tc.cancel}
+                        </button>
+                        {existing && (
+                          <button
+                            onClick={async () => {
+                              await fetch("/api/api-keys", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ action: "delete", service: svc.service }),
+                              });
+                              setByokMsg(ts.byokDeleted);
+                              setByokEditing(null);
+                              const data = await fetch("/api/api-keys").then((r) => r.json());
+                              setApiKeys(data.keys || []);
+                              setTimeout(() => setByokMsg(""), 3000);
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded border border-red-200 transition-colors cursor-pointer"
+                          >
+                            {ts.byokDelete}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {byokMsg && <p className="text-sm text-green-600 mt-3">{byokMsg}</p>}
         </div>
 
         {/* Audit Log */}

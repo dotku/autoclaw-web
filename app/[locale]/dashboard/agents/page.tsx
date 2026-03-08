@@ -70,6 +70,7 @@ export default function AgentsPage() {
     { type: "social_media", label: ta.socialMedia },
     { type: "product_manager", label: ta.productManager },
     { type: "sales_followup", label: ta.salesFollowup },
+    { type: "orchestrator", label: ta.orchestrator },
   ];
 
   const { user, isLoading: userLoading } = useUser();

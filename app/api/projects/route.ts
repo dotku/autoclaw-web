@@ -93,6 +93,17 @@ const AGENT_PLANS: Record<string, Record<string, object>> = {
       ],
       blockers: ["Need CRM API credentials", "Need current sales pipeline data"],
     },
+    orchestrator: {
+      plan: "Coordinate all agents across projects. Analyze reports, identify cross-agent synergies, generate market intelligence, auto-optimize workflows, and produce weekly operations digests.",
+      tasks: [
+        { name: "Analyze agent ecosystem & collect reports", status: "in_progress" },
+        { name: "Generate cross-agent optimization recommendations", status: "pending" },
+        { name: "Market intelligence & content strategy", status: "pending" },
+        { name: "Auto-coordinate agents (reset periodic tasks, flag blockers)", status: "pending" },
+        { name: "Generate weekly operations digest", status: "pending" },
+      ],
+      blockers: [],
+    },
   },
   zh: {
     email_marketing: {
@@ -166,6 +177,17 @@ const AGENT_PLANS: Record<string, Record<string, object>> = {
         { name: "\u53d1\u8d77\u9996\u6b21\u57f9\u80b2\u6d3b\u52a8", status: "pending" },
       ],
       blockers: ["\u9700\u8981 CRM API \u51ed\u8bc1", "\u9700\u8981\u5f53\u524d\u9500\u552e\u7ba1\u9053\u6570\u636e"],
+    },
+    orchestrator: {
+      plan: "协调所有项目的智能体。分析报告、识别跨智能体协同机会、生成市场情报、自动优化工作流程，并生成每周运营摘要。",
+      tasks: [
+        { name: "分析智能体生态系统并收集报告", status: "in_progress" },
+        { name: "生成跨智能体优化建议", status: "pending" },
+        { name: "市场情报与内容策略", status: "pending" },
+        { name: "自动协调智能体（重置周期任务、标记阻塞）", status: "pending" },
+        { name: "生成每周运营摘要", status: "pending" },
+      ],
+      blockers: [],
     },
   },
 };

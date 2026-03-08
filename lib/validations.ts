@@ -23,7 +23,7 @@ export const activateAgentSchema = z.object({
   project_id: id,
   agent_type: z.enum([
     "email_marketing", "seo_content", "lead_prospecting",
-    "social_media", "product_manager", "sales_followup",
+    "social_media", "product_manager", "sales_followup", "orchestrator",
   ]),
   locale,
 });
