@@ -400,6 +400,8 @@ export default function Home() {
             <p>&copy; {new Date().getFullYear()} {t.footerRights}</p>
             <span className="hidden sm:inline text-gray-600">|</span>
             <a href={`/${locale}/privacy`} className="hover:text-white transition-colors">{t.footerPrivacy}</a>
+            <span className="hidden sm:inline text-gray-600">|</span>
+            <a href={`/${locale}/changelog`} className="hover:text-white transition-colors">{t.footerChangelog}</a>
           </div>
         </div>
       </footer>
