@@ -172,17 +172,23 @@ export async function GET() {
   const sql = getDb();
   const email = session.user.email as string;
 
-  const users = await sql`SELECT id, plan FROM users WHERE email = ${email}`;
+  const users = await sql`SELECT id, plan, role FROM users WHERE email = ${email}`;
   if (users.length === 0) {
     return NextResponse.json({ projects: [], plan: "starter", agentLimit: 2, totalAgents: 0 });
   }
 
   const userId = users[0].id;
   const plan = (users[0].plan as string) || "starter";
+  const role = (users[0].role as string) || "user";
   const agentLimit = PLAN_AGENT_LIMITS[plan] || 2;
+  const isAdmin = role === "admin";
 
-  const projects = await sql`SELECT id, name, website, description, created_at FROM projects WHERE user_id = ${userId} ORDER BY created_at DESC`;
-  const totalAgents = await sql`SELECT COUNT(*)::int as count FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE p.user_id = ${userId}`;
+  const projects = isAdmin
+    ? await sql`SELECT id, name, website, description, ga_property_id, created_at FROM projects ORDER BY created_at DESC`
+    : await sql`SELECT id, name, website, description, ga_property_id, created_at FROM projects WHERE user_id = ${userId} ORDER BY created_at DESC`;
+  const totalAgents = isAdmin
+    ? await sql`SELECT COUNT(*)::int as count FROM agent_assignments`
+    : await sql`SELECT COUNT(*)::int as count FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE p.user_id = ${userId}`;
 
   return NextResponse.json({
     projects,
@@ -204,13 +210,15 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { action } = body;
 
-  let users = await sql`SELECT id, plan FROM users WHERE email = ${email}`;
+  let users = await sql`SELECT id, plan, role FROM users WHERE email = ${email}`;
   if (users.length === 0) {
-    users = await sql`INSERT INTO users (email, name, auth0_id) VALUES (${email}, ${(session.user.name as string) || ""}, ${session.user.sub as string}) RETURNING id, plan`;
+    users = await sql`INSERT INTO users (email, name, auth0_id) VALUES (${email}, ${(session.user.name as string) || ""}, ${session.user.sub as string}) RETURNING id, plan, role`;
   }
   const userId = users[0].id;
   const plan = (users[0].plan as string) || "starter";
-  const agentLimit = PLAN_AGENT_LIMITS[plan] || 2;
+  const role = (users[0].role as string) || "user";
+  const isAdmin = role === "admin";
+  const agentLimit = isAdmin ? 999 : (PLAN_AGENT_LIMITS[plan] || 2);
 
   if (action === "create_project") {
     const { name, website, description } = body;
@@ -226,13 +234,17 @@ export async function POST(req: NextRequest) {
     if (!project_id || !agent_type) {
       return NextResponse.json({ error: "project_id and agent_type required" }, { status: 400 });
     }
-    // Verify project ownership
-    const proj = await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${userId}`;
+    // Verify project ownership (admin can access all)
+    const proj = isAdmin
+      ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${userId}`;
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
     // Check limit
-    const totalAgents = await sql`SELECT COUNT(*)::int as count FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE p.user_id = ${userId}`;
+    const totalAgents = isAdmin
+      ? await sql`SELECT COUNT(*)::int as count FROM agent_assignments`
+      : await sql`SELECT COUNT(*)::int as count FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE p.user_id = ${userId}`;
     if (totalAgents[0].count >= agentLimit) {
       return NextResponse.json({ error: `Agent limit reached (${agentLimit} on ${plan} plan). Upgrade to add more.` }, { status: 403 });
     }
@@ -250,8 +262,10 @@ export async function POST(req: NextRequest) {
 
   if (action === "deactivate_agent") {
     const { agent_id } = body;
-    // Verify ownership
-    const agent = await sql`SELECT aa.id FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
+    // Verify ownership (admin can access all)
+    const agent = isAdmin
+      ? await sql`SELECT aa.id FROM agent_assignments aa WHERE aa.id = ${agent_id}`
+      : await sql`SELECT aa.id FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -261,7 +275,9 @@ export async function POST(req: NextRequest) {
 
   if (action === "resolve_blocker") {
     const { agent_id, blocker_index, value } = body;
-    const agent = await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
+    const agent = isAdmin
+      ? await sql`SELECT aa.id, aa.config FROM agent_assignments aa WHERE aa.id = ${agent_id}`
+      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -291,7 +307,9 @@ export async function POST(req: NextRequest) {
 
   if (action === "update_agent_config") {
     const { agent_id, config: newConfig } = body;
-    const agent = await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
+    const agent = isAdmin
+      ? await sql`SELECT aa.id, aa.config FROM agent_assignments aa WHERE aa.id = ${agent_id}`
+      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND p.user_id = ${userId}`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -301,9 +319,23 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
+  if (action === "update_project") {
+    const { project_id, website, ga_property_id, description } = body;
+    const proj = isAdmin
+      ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${userId}`;
+    if (proj.length === 0) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
+    await sql`UPDATE projects SET website = ${website ?? ""}, ga_property_id = ${ga_property_id ?? null}, description = ${description ?? ""} WHERE id = ${project_id}`;
+    return NextResponse.json({ success: true });
+  }
+
   if (action === "delete_project") {
     const { project_id } = body;
-    const proj = await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${userId}`;
+    const proj = isAdmin
+      ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND user_id = ${userId}`;
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }

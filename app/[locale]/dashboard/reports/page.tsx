@@ -21,6 +21,13 @@ interface AgentReport {
   last_run: string;
 }
 
+interface DailyTraffic {
+  date: string;
+  users: number;
+  sessions: number;
+  pageViews: number;
+}
+
 interface MetricsSummary {
   totalTraffic: number;
   emailsSent: number;
@@ -28,6 +35,90 @@ interface MetricsSummary {
   leadsGenerated: number;
   contentPublished: number;
   tasksCompleted: number;
+}
+
+function TrafficChart({ data, locale }: { data: DailyTraffic[]; locale: string }) {
+  if (data.length === 0) return null;
+
+  const maxVal = Math.max(...data.map((d) => d.pageViews), 1);
+  const W = 700;
+  const H = 200;
+  const padL = 40;
+  const padR = 10;
+  const padT = 10;
+  const padB = 30;
+  const chartW = W - padL - padR;
+  const chartH = H - padT - padB;
+
+  const points = data.map((d, i) => ({
+    x: padL + (i / Math.max(data.length - 1, 1)) * chartW,
+    y: padT + chartH - (d.pageViews / maxVal) * chartH,
+    ...d,
+  }));
+
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+  const areaPath = `${linePath} L${points[points.length - 1].x},${padT + chartH} L${points[0].x},${padT + chartH} Z`;
+
+  // Y-axis labels
+  const yTicks = [0, Math.round(maxVal / 2), maxVal];
+
+  // X-axis: show ~6 date labels
+  const step = Math.max(1, Math.floor(data.length / 6));
+  const xLabels = data.filter((_, i) => i % step === 0 || i === data.length - 1);
+
+  const dateLabel = locale === "zh" ? "日期" : "Date";
+  const pvLabel = locale === "zh" ? "页面浏览" : "Page Views";
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-sm">{locale === "zh" ? "每日流量趋势（近30天）" : "Daily Traffic Trend (Last 30 Days)"}</h3>
+        <span className="text-xs text-gray-400">{pvLabel}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[500px]" style={{ maxHeight: 220 }}>
+          {/* Grid lines */}
+          {yTicks.map((tick) => {
+            const y = padT + chartH - (tick / maxVal) * chartH;
+            return (
+              <g key={tick}>
+                <line x1={padL} y1={y} x2={W - padR} y2={y} stroke="#e5e7eb" strokeWidth={0.5} />
+                <text x={padL - 4} y={y + 3} textAnchor="end" fontSize={9} fill="#9ca3af">{tick}</text>
+              </g>
+            );
+          })}
+          {/* Area fill */}
+          <path d={areaPath} fill="url(#trafficGrad)" opacity={0.3} />
+          {/* Line */}
+          <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth={2} />
+          {/* Dots */}
+          {points.map((p, i) => (
+            <circle key={i} cx={p.x} cy={p.y} r={2.5} fill="#3b82f6" stroke="white" strokeWidth={1}>
+              <title>{`${p.date}: ${p.pageViews} ${pvLabel}`}</title>
+            </circle>
+          ))}
+          {/* X labels */}
+          {xLabels.map((d) => {
+            const idx = data.indexOf(d);
+            const x = padL + (idx / Math.max(data.length - 1, 1)) * chartW;
+            const label = d.date.slice(5); // MM-DD
+            return (
+              <text key={d.date} x={x} y={H - 5} textAnchor="middle" fontSize={9} fill="#9ca3af">{label}</text>
+            );
+          })}
+          {/* Axis labels */}
+          <text x={padL} y={H - 5} textAnchor="start" fontSize={8} fill="#d1d5db">{dateLabel}</text>
+          {/* Gradient */}
+          <defs>
+            <linearGradient id="trafficGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4} />
+              <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+    </div>
+  );
 }
 
 const STATUS_LABELS: Record<string, Record<string, string>> = {
@@ -93,6 +184,7 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<AgentReport[]>([]);
   const [brevoStats, setBrevoStats] = useState({ emailsSent: 0, delivered: 0, opened: 0, clicked: 0 });
   const [gaStats, setGaStats] = useState({ totalUsers: 0, sessions: 0, pageViews: 0 });
+  const [gaDaily, setGaDaily] = useState<DailyTraffic[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -104,6 +196,7 @@ export default function ReportsPage() {
         setReports(data.reports || []);
         if (data.brevoStats) setBrevoStats(data.brevoStats);
         if (data.gaStats) setGaStats(data.gaStats);
+        if (data.gaDaily) setGaDaily(data.gaDaily);
       })
       .finally(() => setLoading(false));
   }, [user, locale]);
@@ -198,6 +291,12 @@ export default function ReportsPage() {
                 ))}
               </div>
             </section>
+
+            {gaDaily.length > 0 && (
+              <section className="mb-8">
+                <TrafficChart data={gaDaily} locale={locale} />
+              </section>
+            )}
 
             <section>
               <h2 className="text-lg font-semibold mb-4">{tr.agentReports}</h2>

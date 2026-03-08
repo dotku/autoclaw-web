@@ -1,11 +1,19 @@
 "use client";
 
 import { useUser } from "@auth0/nextjs-auth0/client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+
+interface Project {
+  id: number;
+  name: string;
+  website: string;
+  description: string;
+  ga_property_id: string | null;
+}
 
 export default function SettingsPage() {
   const params = useParams();
@@ -17,6 +25,18 @@ export default function SettingsPage() {
   const { user, isLoading: userLoading } = useUser();
   const [selectedLocale, setSelectedLocale] = useState<string>(locale);
   const [saved, setSaved] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ website: "", ga_property_id: "", description: "" });
+  const [projectSaving, setProjectSaving] = useState(false);
+  const [projectSaved, setProjectSaved] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/projects")
+      .then((r) => r.json())
+      .then((data) => setProjects(data.projects || []));
+  }, [user]);
 
   function handleSave() {
     document.cookie = `locale=${selectedLocale};path=/;max-age=31536000`;
@@ -24,6 +44,47 @@ export default function SettingsPage() {
     if (selectedLocale !== locale) {
       const newPath = window.location.pathname.replace(`/${locale}`, `/${selectedLocale}`);
       window.location.href = newPath;
+    }
+  }
+
+  function startEdit(project: Project) {
+    setEditingId(project.id);
+    setEditForm({
+      website: project.website || "",
+      ga_property_id: project.ga_property_id || "",
+      description: project.description || "",
+    });
+    setProjectSaved(null);
+  }
+
+  async function saveProject(projectId: number) {
+    setProjectSaving(true);
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_project",
+          project_id: projectId,
+          website: editForm.website,
+          ga_property_id: editForm.ga_property_id || null,
+          description: editForm.description,
+        }),
+      });
+      if (res.ok) {
+        setProjects((prev) =>
+          prev.map((p) =>
+            p.id === projectId
+              ? { ...p, website: editForm.website, ga_property_id: editForm.ga_property_id || null, description: editForm.description }
+              : p
+          )
+        );
+        setEditingId(null);
+        setProjectSaved(projectId);
+        setTimeout(() => setProjectSaved(null), 2000);
+      }
+    } finally {
+      setProjectSaving(false);
     }
   }
 
@@ -74,7 +135,107 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
+        {/* Project Management */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+          <h2 className="text-lg font-semibold mb-1">{ts.projectsTitle}</h2>
+          <p className="text-sm text-gray-500 mb-4">{ts.projectsDesc}</p>
+
+          {projects.length === 0 ? (
+            <p className="text-sm text-gray-400">{ts.noProjects}</p>
+          ) : (
+            <div className="space-y-4">
+              {projects.map((project) => (
+                <div key={project.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold text-sm">{project.name}</h3>
+                    <div className="flex items-center gap-2">
+                      {projectSaved === project.id && (
+                        <span className="text-xs text-green-600">{ts.saved}</span>
+                      )}
+                      {editingId === project.id ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => saveProject(project.id)}
+                            disabled={projectSaving}
+                            className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            {projectSaving ? "..." : tc.save}
+                          </button>
+                          <button
+                            onClick={() => setEditingId(null)}
+                            className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 transition-colors cursor-pointer"
+                          >
+                            {tc.cancel}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => startEdit(project)}
+                          className="text-xs text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                        >
+                          {ts.edit}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {editingId === project.id ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{ts.website}</label>
+                        <input
+                          type="url"
+                          value={editForm.website}
+                          onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
+                          placeholder="https://example.com"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{ts.gaPropertyId}</label>
+                        <input
+                          type="text"
+                          value={editForm.ga_property_id}
+                          onChange={(e) => setEditForm({ ...editForm, ga_property_id: e.target.value })}
+                          placeholder="e.g. 526614012"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                        />
+                        <p className="text-xs text-gray-400 mt-1">{ts.gaPropertyIdHint}</p>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">{ts.description}</label>
+                        <textarea
+                          value={editForm.description}
+                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                          rows={2}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <span className="text-xs text-gray-400">{ts.website}</span>
+                        <p className="text-gray-700 truncate">{project.website || "-"}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-400">{ts.gaPropertyId}</span>
+                        <p className="text-gray-700">{project.ga_property_id || "-"}</p>
+                      </div>
+                      <div>
+                        <span className="text-xs text-gray-400">{ts.description}</span>
+                        <p className="text-gray-700 truncate">{project.description || "-"}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Language Settings */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
           <h2 className="text-lg font-semibold mb-1">{ts.language}</h2>
           <p className="text-sm text-gray-500 mb-4">{ts.languageDesc}</p>
 
@@ -114,7 +275,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6">
+        {/* GA Integration Guide */}
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-lg font-semibold mb-1">{ts.gaTitle}</h2>
           <p className="text-sm text-gray-500 mb-4">{ts.gaDesc}</p>
 
