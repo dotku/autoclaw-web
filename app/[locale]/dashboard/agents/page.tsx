@@ -171,7 +171,7 @@ export default function AgentsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{ta.signInAgents}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -183,7 +183,7 @@ export default function AgentsPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link href={`/${locale}`} className="text-xl font-bold tracking-tight flex items-center gap-2">
             <img src="/logo.svg" alt="AutoClaw" className="w-7 h-7" />
-            <span><span className="text-blue-600">Auto</span>Claw</span>
+            <span><span className="text-red-600">Auto</span>Claw</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link href={`/${locale}/dashboard`} className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.dashboard}</Link>
@@ -214,7 +214,7 @@ export default function AgentsPage() {
               <div className="text-sm text-gray-500">
                 <span className="font-medium text-gray-700 capitalize">{planInfo.plan}</span> {ta.plan} — {planInfo.totalAgents}/{planInfo.agentLimit === 999 ? ta.unlimited : planInfo.agentLimit} {ta.agentsUsed}
               </div>
-              <button onClick={() => setShowCreateProject(true)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+              <button onClick={() => setShowCreateProject(true)} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
                 {ta.newProject}
               </button>
             </div>
@@ -223,11 +223,11 @@ export default function AgentsPage() {
               <form onSubmit={createProject} className="bg-white rounded-lg border border-gray-200 p-5 mb-4">
                 <h3 className="font-semibold text-sm mb-3">{ta.createProject}</h3>
                 <div className="space-y-3">
-                  <input type="text" placeholder={ta.projectName} value={newProject.name} onChange={(e) => setNewProject({ ...newProject, name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-                  <input type="text" placeholder={ta.websiteUrl} value={newProject.website} onChange={(e) => setNewProject({ ...newProject, website: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <textarea placeholder={ta.briefDesc} value={newProject.description} onChange={(e) => setNewProject({ ...newProject, description: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" rows={2} />
+                  <input type="text" placeholder={ta.projectName} value={newProject.name} onChange={(e) => setNewProject({ ...newProject, name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" required />
+                  <input type="text" placeholder={ta.websiteUrl} value={newProject.website} onChange={(e) => setNewProject({ ...newProject, website: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" />
+                  <textarea placeholder={ta.briefDesc} value={newProject.description} onChange={(e) => setNewProject({ ...newProject, description: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none" rows={2} />
                   <div className="flex gap-2">
-                    <button type="submit" disabled={actionLoading || !newProject.name.trim()} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">{tc.create}</button>
+                    <button type="submit" disabled={actionLoading || !newProject.name.trim()} className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">{tc.create}</button>
                     <button type="button" onClick={() => setShowCreateProject(false)} className="text-gray-500 hover:text-gray-700 px-4 py-2 text-sm cursor-pointer">{tc.cancel}</button>
                   </div>
                 </div>
@@ -257,7 +257,7 @@ export default function AgentsPage() {
                       {availableToAdd.length > 0 && planInfo.totalAgents < planInfo.agentLimit && (
                         <select
                           onChange={(e) => { if (e.target.value) { activateAgent(project.id, e.target.value); e.target.value = ""; } }}
-                          className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500"
                           defaultValue=""
                         >
                           <option value="" disabled>{ta.addAgent}</option>
@@ -307,7 +307,7 @@ export default function AgentsPage() {
                                   <span>{completedTasks}/{tasks.length} {ta.tasks} ({progress}%)</span>
                                 </div>
                                 <div className="w-full bg-gray-100 rounded-full h-2">
-                                  <div className="bg-blue-500 h-2 rounded-full transition-all" style={{ width: `${Math.max(progress, inProgressTasks > 0 ? 8 : 0)}%` }} />
+                                  <div className="bg-red-500 h-2 rounded-full transition-all" style={{ width: `${Math.max(progress, inProgressTasks > 0 ? 8 : 0)}%` }} />
                                 </div>
                               </div>
                             )}

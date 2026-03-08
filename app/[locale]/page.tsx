@@ -56,7 +56,7 @@ function SignupForm({ t }: { t: ReturnType<typeof getDictionary>["landing"] }) {
         <div className="text-4xl mb-4">&#10003;</div>
         <h3 className="text-xl font-bold text-white mb-2">{t.formSuccess}</h3>
         <p className="text-gray-300">{t.formSuccessMsg}</p>
-        <button onClick={() => setStatus("idle")} className="mt-6 text-blue-400 hover:underline text-sm">
+        <button onClick={() => setStatus("idle")} className="mt-6 text-red-400 hover:underline text-sm">
           {t.formRegisterAnother}
         </button>
       </div>
@@ -69,27 +69,27 @@ function SignupForm({ t }: { t: ReturnType<typeof getDictionary>["landing"] }) {
         <div className="grid sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">{t.formName}</label>
-            <input name="name" type="text" required className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400" placeholder="John Doe" />
+            <input name="name" type="text" required className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-red-400" placeholder="John Doe" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">{t.formEmail}</label>
-            <input name="email" type="email" required className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400" placeholder="you@company.com" />
+            <input name="email" type="email" required className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-red-400" placeholder="you@company.com" />
           </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">{t.formCompany}</label>
-          <input name="company" type="text" className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400" />
+          <input name="company" type="text" className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-red-400" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">{t.formWebsite}</label>
-          <input name="website" type="url" className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400" placeholder="https://yourproduct.com" />
+          <input name="website" type="url" className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-red-400" placeholder="https://yourproduct.com" />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">{t.formAgents}</label>
           <div className="grid grid-cols-2 gap-2">
             {agentChecks.map((agent) => (
               <label key={agent} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
-                <input type="checkbox" checked={selectedAgents.includes(agent)} onChange={() => toggleAgent(agent)} className="rounded border-white/30 bg-white/10 text-blue-500 focus:ring-blue-400" />
+                <input type="checkbox" checked={selectedAgents.includes(agent)} onChange={() => toggleAgent(agent)} className="rounded border-white/30 bg-white/10 text-red-500 focus:ring-red-400" />
                 {agent}
               </label>
             ))}
@@ -97,9 +97,9 @@ function SignupForm({ t }: { t: ReturnType<typeof getDictionary>["landing"] }) {
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-1">{t.formGoals}</label>
-          <textarea name="goals" rows={3} className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-blue-400" placeholder={t.formGoalsPlaceholder} />
+          <textarea name="goals" rows={3} className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-red-400" placeholder={t.formGoalsPlaceholder} />
         </div>
-        <button type="submit" disabled={status === "loading"} className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-500/50 text-white py-3 rounded-lg font-medium transition-colors text-lg">
+        <button type="submit" disabled={status === "loading"} className="w-full bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 text-white py-3 rounded-lg font-medium transition-colors text-lg">
           {status === "loading" ? t.formSubmitting : t.formSubmit}
         </button>
         {status === "error" && <p className="text-red-400 text-sm text-center">{t.formError}</p>}
@@ -180,7 +180,7 @@ export default function Home() {
                 <div className="flex items-center gap-3">
                   <a href={`/${locale}/dashboard`} className="flex items-center gap-2">
                     {user.picture ? (
-                      <img src={user.picture} alt={user.name || "User"} className="w-8 h-8 rounded-full border-2 border-blue-200" referrerPolicy="no-referrer" />
+                      <img src={user.picture} alt={user.name || "User"} className="w-8 h-8 rounded-full border-2 border-red-200" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center text-sm font-bold">
                         {(user.name || user.email || "U")[0].toUpperCase()}
@@ -209,15 +209,15 @@ export default function Home() {
 
       <main>
         {/* Hero */}
-        <section className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white">
+        <section className="bg-gradient-to-br from-slate-900 via-red-950 to-slate-900 text-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-36 text-center">
-            <p className="text-blue-400 font-semibold text-sm uppercase tracking-wider mb-4">{t.heroTag}</p>
+            <p className="text-red-400 font-semibold text-sm uppercase tracking-wider mb-4">{t.heroTag}</p>
             <h1 className="text-4xl md:text-6xl font-bold leading-tight mb-6 max-w-4xl mx-auto">
-              {t.heroTitle} <span className="text-blue-400">{t.heroTitleHighlight}</span>
+              {t.heroTitle} <span className="text-red-400">{t.heroTitleHighlight}</span>
             </h1>
             <p className="text-xl text-gray-300 mb-10 max-w-2xl mx-auto leading-relaxed">{t.heroDescription}</p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.startFree}</a>
+              <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.startFree}</a>
               <a href="#how-it-works" className="border border-gray-500 hover:border-white text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.seeHowItWorks}</a>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 pt-12 border-t border-gray-700 max-w-3xl mx-auto">
@@ -240,8 +240,8 @@ export default function Home() {
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
               {agents.map((agent) => (
-                <div key={agent.title} className="p-6 rounded-xl border border-gray-100 hover:border-blue-200 hover:shadow-lg transition-all group">
-                  <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center text-primary mb-4 group-hover:bg-primary group-hover:text-white transition-colors">
+                <div key={agent.title} className="p-6 rounded-xl border border-gray-100 hover:border-red-200 hover:shadow-lg transition-all group">
+                  <div className="w-12 h-12 bg-red-50 rounded-lg flex items-center justify-center text-primary mb-4 group-hover:bg-primary group-hover:text-white transition-colors">
                     <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d={agent.icon} />
                     </svg>
@@ -291,13 +291,13 @@ export default function Home() {
             <div className="grid md:grid-cols-3 gap-8">
               {caseStudies.map((cs) => (
                 <div key={cs.company} className="rounded-xl border border-gray-100 overflow-hidden hover:shadow-lg transition-shadow">
-                  <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
-                    <p className="text-blue-200 text-xs uppercase tracking-wider mb-1">{cs.industry}</p>
+                  <div className="bg-gradient-to-r from-red-600 to-red-700 p-6 text-white">
+                    <p className="text-red-200 text-xs uppercase tracking-wider mb-1">{cs.industry}</p>
                     <h3 className="text-2xl font-bold">{cs.company}</h3>
                   </div>
                   <div className="p-6">
                     <div className="flex items-center gap-2 mb-4">
-                      <span className="bg-blue-50 text-primary text-sm font-semibold px-3 py-1 rounded-full">{cs.agents} {t.aiAgents}</span>
+                      <span className="bg-red-50 text-primary text-sm font-semibold px-3 py-1 rounded-full">{cs.agents} {t.aiAgents}</span>
                     </div>
                     <p className="text-gray-500 text-sm leading-relaxed">{cs.results}</p>
                   </div>
@@ -316,17 +316,17 @@ export default function Home() {
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
               {pricingPlans.map((plan) => (
-                <div key={plan.name} className={`rounded-xl p-8 ${plan.highlight ? "bg-primary text-white ring-4 ring-blue-200 scale-105" : "bg-white border border-gray-200"}`}>
-                  <h3 className={`text-lg font-semibold mb-1 ${plan.highlight ? "text-blue-100" : "text-gray-500"}`}>{plan.name}</h3>
+                <div key={plan.name} className={`rounded-xl p-8 ${plan.highlight ? "bg-primary text-white ring-4 ring-red-200 scale-105" : "bg-white border border-gray-200"}`}>
+                  <h3 className={`text-lg font-semibold mb-1 ${plan.highlight ? "text-red-100" : "text-gray-500"}`}>{plan.name}</h3>
                   <div className="mb-2">
                     <span className="text-4xl font-bold">{plan.price}</span>
-                    {plan.period && <span className={`text-sm ${plan.highlight ? "text-blue-200" : "text-gray-400"}`}>{plan.period}</span>}
+                    {plan.period && <span className={`text-sm ${plan.highlight ? "text-red-200" : "text-gray-400"}`}>{plan.period}</span>}
                   </div>
-                  <p className={`text-sm mb-6 ${plan.highlight ? "text-blue-200" : "text-gray-400"}`}>{plan.description}</p>
+                  <p className={`text-sm mb-6 ${plan.highlight ? "text-red-200" : "text-gray-400"}`}>{plan.description}</p>
                   <ul className="space-y-3 mb-8">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2 text-sm">
-                        <svg className={`w-5 h-5 shrink-0 mt-0.5 ${plan.highlight ? "text-blue-200" : "text-green-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className={`w-5 h-5 shrink-0 mt-0.5 ${plan.highlight ? "text-red-200" : "text-green-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                         {feature}
@@ -347,7 +347,7 @@ export default function Home() {
                         } catch { window.location.href = `/auth/login?returnTo=/${locale}/dashboard/agents`; }
                       }
                     }}
-                    className={`block w-full text-center py-3 rounded-lg font-medium transition-colors cursor-pointer ${plan.highlight ? "bg-white text-primary hover:bg-blue-50" : "bg-primary text-white hover:bg-primary-dark"}`}
+                    className={`block w-full text-center py-3 rounded-lg font-medium transition-colors cursor-pointer ${plan.highlight ? "bg-white text-primary hover:bg-red-50" : "bg-primary text-white hover:bg-primary-dark"}`}
                   >
                     {plan.cta}
                   </button>
@@ -358,14 +358,14 @@ export default function Home() {
         </section>
 
         {/* Signup */}
-        <section id="signup" className="py-20 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white">
+        <section id="signup" className="py-20 bg-gradient-to-br from-slate-900 via-red-950 to-slate-900 text-white">
           <div className="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
             <h2 className="text-3xl md:text-4xl font-bold mb-4">{t.signupTitle}</h2>
             <p className="text-lg text-gray-300 mb-8">{t.signupSubtitle}</p>
             <SignupForm t={t} />
             <p className="text-gray-400 text-sm mt-6">
               {t.questionsEmail}{" "}
-              <a href="mailto:jay.lin@jytech.us" className="text-blue-400 hover:underline">jay.lin@jytech.us</a>
+              <a href="mailto:jay.lin@jytech.us" className="text-red-400 hover:underline">jay.lin@jytech.us</a>
             </p>
           </div>
         </section>
@@ -376,7 +376,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
           <div className="grid md:grid-cols-3 gap-8">
             <div>
-              <p className="text-xl font-bold text-white mb-2"><span className="text-blue-400">Auto</span>Claw</p>
+              <p className="text-xl font-bold text-white mb-2"><span className="text-red-400">Auto</span>Claw</p>
               <p className="text-sm leading-relaxed">{t.footerDesc}</p>
             </div>
             <div>

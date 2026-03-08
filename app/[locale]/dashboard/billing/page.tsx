@@ -104,7 +104,7 @@ export default function BillingPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{td.signInDashboard}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -116,7 +116,7 @@ export default function BillingPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link href={`/${locale}`} className="text-xl font-bold tracking-tight flex items-center gap-2">
             <img src="/logo.svg" alt="AutoClaw" className="w-7 h-7" />
-            <span><span className="text-blue-600">Auto</span>Claw</span>
+            <span><span className="text-red-600">Auto</span>Claw</span>
           </Link>
           <div className="flex items-center gap-4">
             <LanguageSwitcher locale={locale} />
@@ -147,7 +147,7 @@ export default function BillingPage() {
               {subscriptions.length === 0 ? (
                 <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
                   <p className="text-gray-500 mb-4">{td.noSubscriptions}</p>
-                  <Link href={`/${locale}#pricing`} className="text-blue-600 hover:underline text-sm font-medium">{td.viewPlans}</Link>
+                  <Link href={`/${locale}#pricing`} className="text-red-600 hover:underline text-sm font-medium">{td.viewPlans}</Link>
                 </div>
               ) : (
                 <div className="grid gap-4">
@@ -197,8 +197,8 @@ export default function BillingPage() {
                             <td className="px-4 py-3 font-medium">{formatCurrency(inv.amount_due, inv.currency)}</td>
                             <td className="px-4 py-3">{statusBadge(inv.status)}</td>
                             <td className="px-4 py-3 text-right space-x-2">
-                              {inv.hosted_invoice_url && <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{td.view}</a>}
-                              {inv.invoice_pdf && <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{td.pdf}</a>}
+                              {inv.hosted_invoice_url && <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline">{td.view}</a>}
+                              {inv.invoice_pdf && <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline">{td.pdf}</a>}
                             </td>
                           </tr>
                         ))}

@@ -101,7 +101,7 @@ export default function SettingsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{tc.loading}</h1>
-          <a href="/auth/login" className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href="/auth/login" className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -113,7 +113,7 @@ export default function SettingsPage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link href={`/${locale}`} className="text-xl font-bold tracking-tight flex items-center gap-2">
             <img src="/logo.svg" alt="AutoClaw" className="w-7 h-7" />
-            <span><span className="text-blue-600">Auto</span>Claw</span>
+            <span><span className="text-red-600">Auto</span>Claw</span>
           </Link>
           <div className="flex items-center gap-4">
             <Link href={`/${locale}/dashboard`} className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.dashboard}</Link>
@@ -158,7 +158,7 @@ export default function SettingsPage() {
                           <button
                             onClick={() => saveProject(project.id)}
                             disabled={projectSaving}
-                            className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                            className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
                           >
                             {projectSaving ? "..." : tc.save}
                           </button>
@@ -172,7 +172,7 @@ export default function SettingsPage() {
                       ) : (
                         <button
                           onClick={() => startEdit(project)}
-                          className="text-xs text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                          className="text-xs text-red-600 hover:text-red-800 transition-colors cursor-pointer"
                         >
                           {ts.edit}
                         </button>
@@ -189,7 +189,7 @@ export default function SettingsPage() {
                           value={editForm.website}
                           onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
                           placeholder="https://example.com"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
                         />
                       </div>
                       <div>
@@ -199,7 +199,7 @@ export default function SettingsPage() {
                           value={editForm.ga_property_id}
                           onChange={(e) => setEditForm({ ...editForm, ga_property_id: e.target.value })}
                           placeholder="e.g. 526614012"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
                         />
                         <p className="text-xs text-gray-400 mt-1">{ts.gaPropertyIdHint}</p>
                       </div>
@@ -209,7 +209,7 @@ export default function SettingsPage() {
                           value={editForm.description}
                           onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                           rows={2}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none resize-none"
                         />
                       </div>
                     </div>
@@ -248,7 +248,7 @@ export default function SettingsPage() {
                 value="en"
                 checked={selectedLocale === "en"}
                 onChange={() => { setSelectedLocale("en"); setSaved(false); }}
-                className="text-blue-600 focus:ring-blue-500"
+                className="text-red-600 focus:ring-red-500"
               />
               <span className="text-sm font-medium">{ts.english}</span>
             </label>
@@ -259,7 +259,7 @@ export default function SettingsPage() {
                 value="zh"
                 checked={selectedLocale === "zh"}
                 onChange={() => { setSelectedLocale("zh"); setSaved(false); }}
-                className="text-blue-600 focus:ring-blue-500"
+                className="text-red-600 focus:ring-red-500"
               />
               <span className="text-sm font-medium">{ts.chinese}</span>
             </label>
@@ -268,7 +268,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleSave}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+              className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
             >
               {tc.save}
             </button>
@@ -300,7 +300,7 @@ export default function SettingsPage() {
                   onClick={() => {
                     navigator.clipboard.writeText("autoclaw-analytics@jytech.iam.gserviceaccount.com");
                   }}
-                  className="text-xs text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
+                  className="text-xs text-red-600 hover:text-red-800 transition-colors cursor-pointer"
                 >
                   {ts.copy}
                 </button>

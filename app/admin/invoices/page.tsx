@@ -150,7 +150,7 @@ export default function AdminInvoicesPage() {
           <h1 className="text-2xl font-bold mb-4">Admin Access Required</h1>
           <a
             href="/auth/login"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
           >
             Log In
           </a>
@@ -166,7 +166,7 @@ export default function AdminInvoicesPage() {
           <div className="flex items-center gap-4">
             <Link href="/" className="text-xl font-bold tracking-tight flex items-center gap-2">
               <img src="/logo.svg" alt="AutoClaw" className="w-7 h-7" />
-              <span><span className="text-blue-600">Auto</span>Claw</span>
+              <span><span className="text-red-600">Auto</span>Claw</span>
             </Link>
             <span className="text-sm text-gray-400">/ Admin / Invoices</span>
           </div>
@@ -192,7 +192,7 @@ export default function AdminInvoicesPage() {
           <h1 className="text-2xl font-bold">Invoice Management</h1>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
           >
             {showCreate ? "Cancel" : "Create Invoice"}
           </button>
@@ -213,7 +213,7 @@ export default function AdminInvoicesPage() {
                     required
                     value={customerEmail}
                     onChange={(e) => setCustomerEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="client@company.com"
                   />
                 </div>
@@ -225,7 +225,7 @@ export default function AdminInvoicesPage() {
                     type="text"
                     value={customerName}
                     onChange={(e) => setCustomerName(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="Company Name"
                   />
                 </div>
@@ -240,7 +240,7 @@ export default function AdminInvoicesPage() {
                     type="number"
                     value={dueDays}
                     onChange={(e) => setDueDays(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                   />
                 </div>
                 <div>
@@ -251,7 +251,7 @@ export default function AdminInvoicesPage() {
                     type="text"
                     value={memo}
                     onChange={(e) => setMemo(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                     placeholder="Thank you for choosing JYTech.us"
                   />
                 </div>
@@ -272,7 +272,7 @@ export default function AdminInvoicesPage() {
                         updated[i].description = e.target.value;
                         setLineItems(updated);
                       }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                       placeholder="Description (e.g. AI Marketing System Setup)"
                     />
                     <input
@@ -284,7 +284,7 @@ export default function AdminInvoicesPage() {
                         updated[i].amount = e.target.value;
                         setLineItems(updated);
                       }}
-                      className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
                       placeholder="Amount ($)"
                     />
                     {lineItems.length > 1 && (
@@ -305,7 +305,7 @@ export default function AdminInvoicesPage() {
                   onClick={() =>
                     setLineItems([...lineItems, { description: "", amount: "" }])
                   }
-                  className="text-blue-600 hover:text-blue-700 text-sm font-medium cursor-pointer"
+                  className="text-red-600 hover:text-red-700 text-sm font-medium cursor-pointer"
                 >
                   + Add Line Item
                 </button>
@@ -327,7 +327,7 @@ export default function AdminInvoicesPage() {
               <button
                 type="submit"
                 disabled={creating}
-                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
               >
                 {creating ? "Creating..." : "Create Draft Invoice"}
               </button>
@@ -409,7 +409,7 @@ export default function AdminInvoicesPage() {
                               <button
                                 onClick={() => handleAction(inv.id, "finalize")}
                                 disabled={actionLoading === inv.id}
-                                className="text-blue-600 hover:underline disabled:opacity-50 cursor-pointer"
+                                className="text-red-600 hover:underline disabled:opacity-50 cursor-pointer"
                               >
                                 Finalize
                               </button>
@@ -427,7 +427,7 @@ export default function AdminInvoicesPage() {
                               <button
                                 onClick={() => handleAction(inv.id, "send")}
                                 disabled={actionLoading === inv.id}
-                                className="text-blue-600 hover:underline disabled:opacity-50 cursor-pointer"
+                                className="text-red-600 hover:underline disabled:opacity-50 cursor-pointer"
                               >
                                 Send
                               </button>
@@ -445,7 +445,7 @@ export default function AdminInvoicesPage() {
                               href={inv.hosted_invoice_url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline"
+                              className="text-red-600 hover:underline"
                             >
                               View
                             </a>
@@ -455,7 +455,7 @@ export default function AdminInvoicesPage() {
                               href={inv.invoice_pdf}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 hover:underline"
+                              className="text-red-600 hover:underline"
                             >
                               PDF
                             </a>
