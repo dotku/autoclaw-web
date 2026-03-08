@@ -1,36 +1,96 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AutoClaw Web
 
-## Getting Started
+AutoClaw Web is the open-source Next.js frontend and API layer for the AutoClaw platform. It provides a multilingual marketing site, authenticated dashboard, billing and subscription flows, admin invoicing, and automation endpoints used by worker services.
 
-First, run the development server:
+This repository was split from a larger monorepo to keep web development, review, and community contribution focused.
+
+## What It Includes
+
+- Next.js App Router application (`app/`) with locale-aware pages and dashboard UX
+- API routes for organizations, projects, reports, team members, invoicing, chat, checkout, and subscriptions
+- Scheduled maintenance endpoints for audit retention, key cleanup, and report sync
+- Stripe integration for subscription flows
+- PostgreSQL access via Neon serverless driver
+- Zod-based request validation and API key / webhook related security utilities
+
+## Tech Stack
+
+- Next.js 16
+- React 19
+- TypeScript
+- Tailwind CSS 4
+- Stripe
+- Zod
+- Neon Serverless Postgres
+
+## Local Development
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure environment
+
+Create `.env.local` in the repository root.
+
+Minimum required variables depend on which features you run. Common variables used by the app include:
+
+- `DATABASE_URL`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_GROWTH_PRICE_ID`
+- `STRIPE_SCALE_PRICE_ID`
+- `WORKER_URL`
+- `WORKER_AUTH_SECRET`
+- `CRON_SECRET`
+- `OPENCLAW_WEBHOOK_URL`
+- `OPENCLAW_WEBHOOK_SECRET`
+- `ENCRYPTION_KEY`
+
+Optional integrations used by specific routes/features:
+
+- `GA_SERVICE_ACCOUNT_KEY`
+- `BREVO_API_KEY`
+- `HUNTER_API_KEY`
+- `SNOV_API_ID`
+- `SNOV_API_SECRET`
+- `NVIDIA_API_KEY`
+- `CEREBRAS_API_KEY`
+
+### 3. Run the app
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- `npm run dev` - Start local dev server
+- `npm run build` - Build production bundle
+- `npm run start` - Run production server
+- `npm run lint` - Run ESLint
 
-## Learn More
+## Repository Structure
 
-To learn more about Next.js, take a look at the following resources:
+- `app/` - UI routes and API route handlers
+- `components/` - Shared UI components
+- `lib/` - DB, auth, validation, crypto, and integration helpers
+- `public/` - Static assets
+- `scripts/` - Utility scripts (for example key rotation)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Contributing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Issues and pull requests are welcome.
 
-## Deploy on Vercel
+If you want to contribute:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Open an issue describing the bug or proposal.
+2. Submit a PR with focused scope and clear test/verification notes.
+3. Avoid committing secrets or environment-specific files.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Security
+
+If you discover a security issue, please report it privately to the maintainers instead of opening a public issue.
