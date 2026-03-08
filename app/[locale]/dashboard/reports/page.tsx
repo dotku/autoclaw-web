@@ -28,6 +28,11 @@ interface DailyTraffic {
   pageViews: number;
 }
 
+interface ProjectTraffic {
+  project: string;
+  data: DailyTraffic[];
+}
+
 interface MetricsSummary {
   totalTraffic: number;
   emailsSent: number;
@@ -37,7 +42,9 @@ interface MetricsSummary {
   tasksCompleted: number;
 }
 
-function TrafficChart({ data, locale }: { data: DailyTraffic[]; locale: string }) {
+const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+function TrafficChart({ data, locale, projectName, color }: { data: DailyTraffic[]; locale: string; projectName?: string; color?: string }) {
   if (data.length === 0) return null;
 
   const maxVal = Math.max(...data.map((d) => d.pageViews), 1);
@@ -66,13 +73,18 @@ function TrafficChart({ data, locale }: { data: DailyTraffic[]; locale: string }
   const step = Math.max(1, Math.floor(data.length / 6));
   const xLabels = data.filter((_, i) => i % step === 0 || i === data.length - 1);
 
+  const lineColor = color || "#3b82f6";
+  const gradId = `trafficGrad_${(projectName || "default").replace(/\s/g, "_")}`;
   const dateLabel = locale === "zh" ? "日期" : "Date";
   const pvLabel = locale === "zh" ? "页面浏览" : "Page Views";
+  const chartTitle = projectName
+    ? `${projectName} — ${locale === "zh" ? "每日流量（近30天）" : "Daily Traffic (30d)"}`
+    : locale === "zh" ? "每日流量趋势（近30天）" : "Daily Traffic Trend (Last 30 Days)";
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5 mb-6">
+    <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-semibold text-sm">{locale === "zh" ? "每日流量趋势（近30天）" : "Daily Traffic Trend (Last 30 Days)"}</h3>
+        <h3 className="font-semibold text-sm">{chartTitle}</h3>
         <span className="text-xs text-gray-400">{pvLabel}</span>
       </div>
       <div className="overflow-x-auto">
@@ -88,12 +100,12 @@ function TrafficChart({ data, locale }: { data: DailyTraffic[]; locale: string }
             );
           })}
           {/* Area fill */}
-          <path d={areaPath} fill="url(#trafficGrad)" opacity={0.3} />
+          <path d={areaPath} fill={`url(#${gradId})`} opacity={0.3} />
           {/* Line */}
-          <path d={linePath} fill="none" stroke="#3b82f6" strokeWidth={2} />
+          <path d={linePath} fill="none" stroke={lineColor} strokeWidth={2} />
           {/* Dots */}
           {points.map((p, i) => (
-            <circle key={i} cx={p.x} cy={p.y} r={2.5} fill="#3b82f6" stroke="white" strokeWidth={1}>
+            <circle key={i} cx={p.x} cy={p.y} r={2.5} fill={lineColor} stroke="white" strokeWidth={1}>
               <title>{`${p.date}: ${p.pageViews} ${pvLabel}`}</title>
             </circle>
           ))}
@@ -110,9 +122,9 @@ function TrafficChart({ data, locale }: { data: DailyTraffic[]; locale: string }
           <text x={padL} y={H - 5} textAnchor="start" fontSize={8} fill="#d1d5db">{dateLabel}</text>
           {/* Gradient */}
           <defs>
-            <linearGradient id="trafficGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={lineColor} stopOpacity={0.4} />
+              <stop offset="100%" stopColor={lineColor} stopOpacity={0.05} />
             </linearGradient>
           </defs>
         </svg>
@@ -184,7 +196,7 @@ export default function ReportsPage() {
   const [reports, setReports] = useState<AgentReport[]>([]);
   const [brevoStats, setBrevoStats] = useState({ emailsSent: 0, delivered: 0, opened: 0, clicked: 0 });
   const [gaStats, setGaStats] = useState({ totalUsers: 0, sessions: 0, pageViews: 0 });
-  const [gaDaily, setGaDaily] = useState<DailyTraffic[]>([]);
+  const [gaProjects, setGaProjects] = useState<ProjectTraffic[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -196,7 +208,7 @@ export default function ReportsPage() {
         setReports(data.reports || []);
         if (data.brevoStats) setBrevoStats(data.brevoStats);
         if (data.gaStats) setGaStats(data.gaStats);
-        if (data.gaDaily) setGaDaily(data.gaDaily);
+        if (data.gaProjects) setGaProjects(data.gaProjects);
       })
       .finally(() => setLoading(false));
   }, [user, locale]);
@@ -292,9 +304,20 @@ export default function ReportsPage() {
               </div>
             </section>
 
-            {gaDaily.length > 0 && (
+            {gaProjects.length > 0 && (
               <section className="mb-8">
-                <TrafficChart data={gaDaily} locale={locale} />
+                <h2 className="text-lg font-semibold mb-4">{locale === "zh" ? "网站流量" : "Website Traffic"}</h2>
+                <div className="space-y-4">
+                  {gaProjects.map((gp, idx) => (
+                    <TrafficChart
+                      key={gp.project}
+                      data={gp.data}
+                      locale={locale}
+                      projectName={gp.project}
+                      color={CHART_COLORS[idx % CHART_COLORS.length]}
+                    />
+                  ))}
+                </div>
               </section>
             )}
 

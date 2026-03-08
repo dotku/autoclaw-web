@@ -222,16 +222,26 @@ export async function GET(request: Request) {
 
   // Fetch GA4 traffic statistics (last 30 days)
   let gaStats = { totalUsers: 0, sessions: 0, pageViews: 0 };
-  const gaDaily: { date: string; users: number; sessions: number; pageViews: number }[] = [];
-  const gaPropertyIds = [...new Set(
-    userProjects.map((p) => p.ga_property_id as string).filter(Boolean)
-  )];
+  // Build property → project name mapping (deduplicate by property ID)
+  const propertyProjectMap: Record<string, string> = {};
+  for (const p of userProjects) {
+    const pid = p.ga_property_id as string;
+    if (pid && !propertyProjectMap[pid]) {
+      propertyProjectMap[pid] = p.name as string;
+    }
+  }
+  const gaPropertyIds = Object.keys(propertyProjectMap);
+  // Per-project daily data: { projectName: string, data: DailyPoint[] }[]
+  const gaProjects: { project: string; data: { date: string; users: number; sessions: number; pageViews: number }[] }[] = [];
+
   if (process.env.GA_SERVICE_ACCOUNT_KEY && gaPropertyIds.length > 0) {
     try {
       const credentials = JSON.parse(process.env.GA_SERVICE_ACCOUNT_KEY);
       const analyticsClient = new BetaAnalyticsDataClient({ credentials });
-      // Aggregate totals
+
       for (const propertyId of gaPropertyIds) {
+        const projectName = propertyProjectMap[propertyId];
+        // Totals
         const [response] = await analyticsClient.runReport({
           property: `properties/${propertyId}`,
           dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
@@ -247,10 +257,7 @@ export async function GET(request: Request) {
           gaStats.sessions += Number(vals[1]?.value || 0);
           gaStats.pageViews += Number(vals[2]?.value || 0);
         }
-      }
-      // Daily breakdown (aggregate across all properties)
-      const dailyMap: Record<string, { users: number; sessions: number; pageViews: number }> = {};
-      for (const propertyId of gaPropertyIds) {
+        // Daily breakdown per project
         const [dailyRes] = await analyticsClient.runReport({
           property: `properties/${propertyId}`,
           dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
@@ -262,24 +269,25 @@ export async function GET(request: Request) {
           ],
           orderBys: [{ dimension: { dimensionName: "date", orderType: "ALPHANUMERIC" } }],
         });
+        const dailyData: { date: string; users: number; sessions: number; pageViews: number }[] = [];
         for (const row of dailyRes.rows || []) {
           const dateStr = row.dimensionValues?.[0]?.value || "";
           const formatted = dateStr.length === 8
             ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
             : dateStr;
-          if (!dailyMap[formatted]) dailyMap[formatted] = { users: 0, sessions: 0, pageViews: 0 };
-          dailyMap[formatted].users += Number(row.metricValues?.[0]?.value || 0);
-          dailyMap[formatted].sessions += Number(row.metricValues?.[1]?.value || 0);
-          dailyMap[formatted].pageViews += Number(row.metricValues?.[2]?.value || 0);
+          dailyData.push({
+            date: formatted,
+            users: Number(row.metricValues?.[0]?.value || 0),
+            sessions: Number(row.metricValues?.[1]?.value || 0),
+            pageViews: Number(row.metricValues?.[2]?.value || 0),
+          });
         }
+        gaProjects.push({ project: projectName, data: dailyData });
       }
-      Object.entries(dailyMap)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .forEach(([date, vals]) => gaDaily.push({ date, ...vals }));
     } catch {
       // GA4 API unavailable — continue with defaults
     }
   }
 
-  return NextResponse.json({ reports, agents: [], brevoStats, gaStats, gaDaily });
+  return NextResponse.json({ reports, agents: [], brevoStats, gaStats, gaProjects });
 }
