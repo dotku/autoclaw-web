@@ -475,8 +475,8 @@ export default function SettingsPage() {
 
         {/* Team & Organization */}
         <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-1">{ts.teamOrgTitle || ts.orgTitle}</h2>
-          <p className="text-sm text-gray-500 mb-4">{ts.teamOrgDesc || ts.orgDesc}</p>
+          <h2 className="text-lg font-semibold mb-1">{ts.orgTitle}</h2>
+          <p className="text-sm text-gray-500 mb-4">{ts.orgDesc}</p>
 
           {orgs.length === 0 ? (
             <>
@@ -818,8 +818,8 @@ export default function SettingsPage() {
 
           {/* Project Collaborators — invite by project */}
           <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">{ts.collaboratorsTitle || ts.teamTitle || "Project Collaborators"}</h3>
-            <p className="text-xs text-gray-400 mb-3">{ts.collaboratorsDesc || ts.teamDesc || "Invite users to specific projects by email."}</p>
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">{ts.teamTitle}</h3>
+            <p className="text-xs text-gray-400 mb-3">{ts.teamDesc}</p>
             <div className="flex flex-col sm:flex-row gap-2 mb-4">
               <input
                 type="email"

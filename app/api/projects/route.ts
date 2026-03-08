@@ -3,6 +3,7 @@ import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { sendWebhook } from "@/lib/webhook";
 
 export const dynamic = "force-dynamic";
 
@@ -252,6 +253,7 @@ export async function POST(req: NextRequest) {
     }
     const project = await sql`INSERT INTO projects (user_id, name, website, description, domain) VALUES (${userId}, ${name}, ${website || ""}, ${description || ""}, ${domain || null}) RETURNING id, name, website, description, domain, created_at`;
     logAudit({ userId, userEmail: email, action: "project.create", resourceType: "project", resourceId: project[0].id as number, details: { name }, ipAddress: getIp(req) });
+    sendWebhook("project.created", { project_id: project[0].id, name, website, description, domain, user_email: email });
     return NextResponse.json({ project: project[0] });
   }
 
@@ -284,6 +286,7 @@ export async function POST(req: NextRequest) {
     const config = localePlans[agent_type] || {};
     await sql`INSERT INTO agent_assignments (project_id, agent_type, status, config) VALUES (${project_id}, ${agent_type}, 'active', ${JSON.stringify(config)})`;
     logAudit({ userId, userEmail: email, action: "agent.activate", resourceType: "agent", resourceId: project_id, details: { agent_type }, ipAddress: getIp(req) });
+    sendWebhook("agent.activated", { project_id, agent_type, user_email: email, config });
     return NextResponse.json({ success: true });
   }
 
@@ -298,6 +301,7 @@ export async function POST(req: NextRequest) {
     }
     await sql`DELETE FROM agent_assignments WHERE id = ${agent_id}`;
     logAudit({ userId, userEmail: email, action: "agent.deactivate", resourceType: "agent", resourceId: agent_id, details: {}, ipAddress: getIp(req) });
+    sendWebhook("agent.deactivated", { agent_id, user_email: email });
     return NextResponse.json({ success: true });
   }
 
@@ -331,6 +335,7 @@ export async function POST(req: NextRequest) {
     const updatedConfig = { ...config, blockers, tasks, ...(value ? { resolved_info: value } : {}) };
     await sql`UPDATE agent_assignments SET config = ${JSON.stringify(updatedConfig)} WHERE id = ${agent_id}`;
     logAudit({ userId, userEmail: email, action: "blocker.resolve", resourceType: "agent", resourceId: agent_id, details: { blocker_index }, ipAddress: getIp(req) });
+    sendWebhook("blocker.resolved", { agent_id, blocker_index, user_email: email });
     return NextResponse.json({ success: true });
   }
 
@@ -346,6 +351,7 @@ export async function POST(req: NextRequest) {
     const updatedConfig = { ...existingConfig, ...newConfig };
     await sql`UPDATE agent_assignments SET config = ${JSON.stringify(updatedConfig)} WHERE id = ${agent_id}`;
     logAudit({ userId, userEmail: email, action: "agent.config_update", resourceType: "agent", resourceId: agent_id, details: {}, ipAddress: getIp(req) });
+    sendWebhook("agent.config_updated", { agent_id, user_email: email });
     return NextResponse.json({ success: true });
   }
 
@@ -359,6 +365,7 @@ export async function POST(req: NextRequest) {
     }
     await sql`UPDATE projects SET website = ${website ?? ""}, ga_property_id = ${ga_property_id ?? null}, description = ${description ?? ""}, domain = ${domain ?? null} WHERE id = ${project_id}`;
     logAudit({ userId, userEmail: email, action: "project.update", resourceType: "project", resourceId: project_id, details: { website, ga_property_id }, ipAddress: getIp(req) });
+    sendWebhook("project.updated", { project_id, website, ga_property_id, description, domain, user_email: email });
     return NextResponse.json({ success: true });
   }
 
@@ -374,6 +381,7 @@ export async function POST(req: NextRequest) {
     await sql`DELETE FROM chat_messages WHERE project_id = ${project_id}`;
     await sql`DELETE FROM projects WHERE id = ${project_id}`;
     logAudit({ userId, userEmail: email, action: "project.delete", resourceType: "project", resourceId: project_id, details: {}, ipAddress: getIp(req) });
+    sendWebhook("project.deleted", { project_id, user_email: email });
     return NextResponse.json({ success: true });
   }
 
