@@ -56,7 +56,7 @@ function statusBadge(status: string | null) {
     uncollectible: "bg-red-100 text-red-700",
     past_due: "bg-red-100 text-red-700",
     canceled: "bg-gray-100 text-gray-600",
-    trialing: "bg-blue-100 text-blue-700",
+    trialing: "bg-red-100 text-red-700",
     paused: "bg-yellow-100 text-yellow-700",
   };
   const s = status || "unknown";

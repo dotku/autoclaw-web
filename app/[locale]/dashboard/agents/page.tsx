@@ -32,7 +32,7 @@ function statusBadge(status: string | null) {
   const colors: Record<string, string> = {
     active: "bg-green-100 text-green-700",
     paused: "bg-yellow-100 text-yellow-700",
-    completed: "bg-blue-100 text-blue-700",
+    completed: "bg-red-100 text-red-700",
   };
   const s = status || "unknown";
   return (
@@ -319,7 +319,7 @@ export default function AgentsPage() {
                                   {tasks.map((task, i) => (
                                     <div key={i} className="flex items-start gap-2 text-xs">
                                       <span className="mt-0.5 flex-shrink-0">
-                                        {task.status === "completed" ? <span className="text-green-500">&#10003;</span> : task.status === "in_progress" ? <span className="text-blue-500">&#9679;</span> : <span className="text-gray-300">&#9675;</span>}
+                                        {task.status === "completed" ? <span className="text-green-500">&#10003;</span> : task.status === "in_progress" ? <span className="text-red-500">&#9679;</span> : <span className="text-gray-300">&#9675;</span>}
                                       </span>
                                       <span className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}>{task.name}</span>
                                       {(task.status === "in_progress" || task.status === "pending") && (
@@ -341,7 +341,7 @@ export default function AgentsPage() {
                                         <span className="mt-0.5 flex-shrink-0">!</span>
                                         <span>{b}</span>
                                       </div>
-                                      <button onClick={() => resolveBlocker(agent.id, i, b)} disabled={actionLoading} className="text-xs text-blue-500 hover:text-blue-700 font-medium whitespace-nowrap cursor-pointer">{tc.resolve}</button>
+                                      <button onClick={() => resolveBlocker(agent.id, i, b)} disabled={actionLoading} className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap cursor-pointer">{tc.resolve}</button>
                                     </li>
                                   ))}
                                 </ul>
