@@ -3,6 +3,7 @@ import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { orgActionSchema, parseOrError } from "@/lib/validations";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,12 @@ export async function POST(req: NextRequest) {
   const userId = users[0].id;
   const isAdmin = users[0].role === "admin";
 
-  const body = await req.json();
+  const rawBody = await req.json();
+  const parsed = parseOrError(orgActionSchema, rawBody);
+  if ("error" in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+  const body = parsed.data;
   const { action } = body;
 
   if (action === "create") {

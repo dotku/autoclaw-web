@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sendWebhook } from "@/lib/webhook";
+import { projectActionSchema, parseOrError } from "@/lib/validations";
 
 export const dynamic = "force-dynamic";
 
@@ -230,7 +231,12 @@ export async function POST(req: NextRequest) {
 
   const sql = getDb();
   const email = session.user.email as string;
-  const body = await req.json();
+  const rawBody = await req.json();
+  const parsed = parseOrError(projectActionSchema, rawBody);
+  if ("error" in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+  const body = parsed.data;
   const { action } = body;
 
   let users = await sql`SELECT id, plan, role FROM users WHERE email = ${email}`;

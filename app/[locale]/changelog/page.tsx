@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getDictionary, isValidLocale } from "@/lib/i18n";
 import { notFound } from "next/navigation";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export const metadata = {
   title: "Changelog – AutoClaw",
@@ -172,12 +173,15 @@ export default async function ChangelogPage({ params }: { params: Promise<{ loca
           <Link href={`/${locale}`} className="text-xl font-bold">
             <span className="text-red-500">Auto</span>Claw
           </Link>
-          <Link
-            href={`/${locale}`}
-            className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-          >
-            &larr; {l.backHome}
-          </Link>
+          <div className="flex items-center gap-4">
+            <LanguageSwitcher locale={locale} />
+            <Link
+              href={`/${locale}`}
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              &larr; {l.backHome}
+            </Link>
+          </div>
         </div>
       </nav>
 

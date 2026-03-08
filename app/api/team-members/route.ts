@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
+import { inviteTeamMemberSchema, parseOrError } from "@/lib/validations";
 
 export const dynamic = "force-dynamic";
 
@@ -69,12 +70,12 @@ export async function POST(req: NextRequest) {
   const sql = getDb();
   const currentEmail = session.user.email as string;
   const emailDomain = currentEmail.split("@")[1] || "";
-  const body = await req.json();
-  const { email: inviteeEmail, project_id } = body;
-
-  if (!inviteeEmail || !project_id) {
-    return NextResponse.json({ error: "Email and project_id required" }, { status: 400 });
+  const rawBody = await req.json();
+  const parsed = parseOrError(inviteTeamMemberSchema, rawBody);
+  if ("error" in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
   }
+  const { email: inviteeEmail, project_id } = parsed.data;
 
   // Verify the current user owns or has domain access to this project
   const users = await sql`SELECT id, role FROM users WHERE email = ${currentEmail}`;
