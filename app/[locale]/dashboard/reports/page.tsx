@@ -44,7 +44,7 @@ interface MetricsSummary {
 
 const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
-function CombinedTrafficChart({ projects, locale }: { projects: ProjectTraffic[]; locale: string }) {
+function CombinedTrafficChart({ projects, locale, colorMap }: { projects: ProjectTraffic[]; locale: string; colorMap?: Record<string, string> }) {
   if (projects.length === 0) return null;
 
   // Build a unified date axis from all projects
@@ -57,7 +57,8 @@ function CombinedTrafficChart({ projects, locale }: { projects: ProjectTraffic[]
   const projectLines = projects.map((p, idx) => {
     const lookup: Record<string, number> = {};
     for (const d of p.data) lookup[d.date] = d.pageViews;
-    return { name: p.project, color: CHART_COLORS[idx % CHART_COLORS.length], lookup };
+    const color = colorMap?.[p.project] || CHART_COLORS[idx % CHART_COLORS.length];
+    return { name: p.project, color, lookup };
   });
 
   const maxVal = Math.max(...projects.flatMap((p) => p.data.map((d) => d.pageViews)), 1);
@@ -205,6 +206,7 @@ export default function ReportsPage() {
   const [brevoStats, setBrevoStats] = useState({ emailsSent: 0, delivered: 0, opened: 0, clicked: 0 });
   const [gaStats, setGaStats] = useState({ totalUsers: 0, sessions: 0, pageViews: 0 });
   const [gaProjects, setGaProjects] = useState<ProjectTraffic[]>([]);
+  const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -216,7 +218,11 @@ export default function ReportsPage() {
         setReports(data.reports || []);
         if (data.brevoStats) setBrevoStats(data.brevoStats);
         if (data.gaStats) setGaStats(data.gaStats);
-        if (data.gaProjects) setGaProjects(data.gaProjects);
+        if (data.gaProjects) {
+          setGaProjects(data.gaProjects);
+          // Default: select all projects
+          setSelectedProjects(new Set(data.gaProjects.map((p: ProjectTraffic) => p.project)));
+        }
       })
       .finally(() => setLoading(false));
   }, [user, locale]);
@@ -315,8 +321,58 @@ export default function ReportsPage() {
 
             {gaProjects.length > 0 && (
               <section className="mb-8">
-                <h2 className="text-lg font-semibold mb-4">{locale === "zh" ? "\u7f51\u7ad9\u6d41\u91cf" : "Website Traffic"}</h2>
-                <CombinedTrafficChart projects={gaProjects} locale={locale} />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <h2 className="text-lg font-semibold">{locale === "zh" ? "\u7f51\u7ad9\u6d41\u91cf" : "Website Traffic"}</h2>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={() => {
+                        if (selectedProjects.size === gaProjects.length) {
+                          setSelectedProjects(new Set());
+                        } else {
+                          setSelectedProjects(new Set(gaProjects.map((p) => p.project)));
+                        }
+                      }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        selectedProjects.size === gaProjects.length
+                          ? "bg-gray-800 text-white border-gray-800"
+                          : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
+                      }`}
+                    >
+                      {locale === "zh" ? "\u5168\u90e8" : "All"}
+                    </button>
+                    {gaProjects.map((p, idx) => {
+                      const color = CHART_COLORS[idx % CHART_COLORS.length];
+                      const isSelected = selectedProjects.has(p.project);
+                      return (
+                        <button
+                          key={p.project}
+                          onClick={() => {
+                            const next = new Set(selectedProjects);
+                            if (next.has(p.project)) {
+                              next.delete(p.project);
+                            } else {
+                              next.add(p.project);
+                            }
+                            setSelectedProjects(next);
+                          }}
+                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                            isSelected
+                              ? "text-white border-transparent"
+                              : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
+                          }`}
+                          style={isSelected ? { backgroundColor: color, borderColor: color } : {}}
+                        >
+                          {p.project}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <CombinedTrafficChart
+                  projects={gaProjects.filter((p) => selectedProjects.has(p.project))}
+                  locale={locale}
+                  colorMap={Object.fromEntries(gaProjects.map((p, i) => [p.project, CHART_COLORS[i % CHART_COLORS.length]]))}
+                />
               </section>
             )}
 
