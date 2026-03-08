@@ -16,7 +16,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon.ico") ||
     pathname.startsWith("/sitemap.xml") ||
-    pathname.startsWith("/robots.txt")
+    pathname.startsWith("/robots.txt") ||
+    pathname.match(/\.\w+$/)
   ) {
     return NextResponse.next();
   }
