@@ -1,0 +1,232 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth0 } from "@/lib/auth0";
+import { getDb } from "@/lib/db";
+import { logAudit } from "@/lib/audit";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { encrypt, decrypt, maskKey } from "@/lib/crypto";
+import { createHash, randomBytes } from "crypto";
+import { apiKeyActionSchema, parseOrError } from "@/lib/validations";
+
+export const dynamic = "force-dynamic";
+
+function getIp(req: NextRequest): string {
+  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+}
+
+async function ensureApiKeysTable() {
+  const sql = getDb();
+  await sql`
+    CREATE TABLE IF NOT EXISTS api_keys (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      key_hash VARCHAR(64) NOT NULL,
+      key_prefix VARCHAR(10) NOT NULL,
+      name VARCHAR(255),
+      scopes TEXT[] DEFAULT '{"read"}',
+      last_used_at TIMESTAMP,
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      revoked_at TIMESTAMP
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash)`;
+}
+
+export async function GET(req: NextRequest) {
+  const ip = getIp(req);
+  if (!checkRateLimit(ip, { limit: 30, windowMs: 60_000 })) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  const session = await auth0.getSession();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const sql = getDb();
+  const email = session.user.email as string;
+
+  const users = await sql`SELECT id FROM users WHERE email = ${email}`;
+  if (users.length === 0) {
+    return NextResponse.json({ keys: [], platformKeys: [] });
+  }
+
+  const userId = users[0].id;
+
+  // Existing service keys (user_api_keys table)
+  const rawKeys = await sql`
+    SELECT id, service, label, api_key, updated_at
+    FROM user_api_keys
+    WHERE user_id = ${userId}
+    ORDER BY service ASC
+  `;
+  const keys = rawKeys.map((k) => {
+    let masked_key = "****";
+    try {
+      masked_key = maskKey(decrypt(k.api_key as string));
+    } catch {
+      // Legacy plaintext key — mask directly
+      const raw = k.api_key as string;
+      masked_key = maskKey(raw);
+    }
+    return { id: k.id, service: k.service, label: k.label, masked_key, updated_at: k.updated_at };
+  });
+
+  // Platform API keys (api_keys table)
+  await ensureApiKeysTable();
+  const platformKeys = await sql`
+    SELECT id, key_prefix, name, scopes, last_used_at, expires_at, created_at, revoked_at
+    FROM api_keys
+    WHERE user_id = ${userId}
+    ORDER BY created_at DESC
+  `;
+
+  return NextResponse.json({ keys, platformKeys });
+}
+
+export async function POST(req: NextRequest) {
+  const ip = getIp(req);
+  if (!checkRateLimit(ip, { limit: 20, windowMs: 60_000 })) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  const session = await auth0.getSession();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const sql = getDb();
+  const email = session.user.email as string;
+
+  const users = await sql`SELECT id FROM users WHERE email = ${email}`;
+  if (users.length === 0) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = users[0].id;
+  const contentType = req.headers.get("content-type");
+  if (!contentType?.includes("application/json")) {
+    return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+  }
+
+  const body = await req.json();
+
+  const parsed = parseOrError(apiKeyActionSchema, body);
+  if ("error" in parsed) {
+    return NextResponse.json({ error: parsed.error }, { status: 400 });
+  }
+  const { action } = parsed.data;
+
+  // --- Existing service key actions ---
+
+  if (action === "upsert") {
+    const { service, api_key, label } = parsed.data as { service: string; api_key: string; label?: string | null; action: string };
+
+    const encryptedKey = encrypt(api_key.trim());
+
+    await sql`
+      INSERT INTO user_api_keys (user_id, service, api_key, label, updated_at)
+      VALUES (${userId}, ${service}, ${encryptedKey}, ${label || null}, NOW())
+      ON CONFLICT (user_id, service)
+      DO UPDATE SET api_key = ${encryptedKey}, label = ${label || null}, updated_at = NOW()
+    `;
+
+    logAudit({
+      userId,
+      userEmail: email,
+      action: "apikey.upsert",
+      resourceType: "api_key",
+      resourceId: null as unknown as number,
+      details: { service },
+      ipAddress: ip,
+    });
+
+    return NextResponse.json({ message: "API key saved" });
+  }
+
+  if (action === "delete") {
+    const { service } = parsed.data as { service: string; action: string };
+
+    await sql`DELETE FROM user_api_keys WHERE user_id = ${userId} AND service = ${service}`;
+
+    logAudit({
+      userId,
+      userEmail: email,
+      action: "apikey.delete",
+      resourceType: "api_key",
+      resourceId: null as unknown as number,
+      details: { service },
+      ipAddress: ip,
+    });
+
+    return NextResponse.json({ message: "API key deleted" });
+  }
+
+  // --- Platform API key actions (api_keys table) ---
+
+  if (action === "create") {
+    await ensureApiKeysTable();
+
+    const { name, scopes, expires_at } = parsed.data as { name?: string | null; scopes?: string[]; expires_at?: string | null; action: string };
+    const keyScopes: string[] = Array.isArray(scopes) ? scopes : ["read"];
+
+    // Generate key: ac_live_ + 32 random hex chars
+    const rawKey = "ac_live_" + randomBytes(16).toString("hex");
+    const keyHash = createHash("sha256").update(rawKey).digest("hex");
+    const keyPrefix = rawKey.substring(0, 10);
+
+    const expiresAt = expires_at ? new Date(expires_at) : null;
+
+    const inserted = await sql`
+      INSERT INTO api_keys (user_id, key_hash, key_prefix, name, scopes, expires_at)
+      VALUES (${userId}, ${keyHash}, ${keyPrefix}, ${name || null}, ${keyScopes}, ${expiresAt})
+      RETURNING id, key_prefix, name, scopes, expires_at, created_at
+    `;
+
+    logAudit({
+      userId,
+      userEmail: email,
+      action: "platform_apikey.create",
+      resourceType: "api_key",
+      resourceId: inserted[0].id as number,
+      details: { key_prefix: keyPrefix, scopes: keyScopes },
+      ipAddress: ip,
+    });
+
+    // Return the full key ONCE - it cannot be retrieved again
+    return NextResponse.json({
+      key: rawKey,
+      ...inserted[0],
+    });
+  }
+
+  if (action === "revoke") {
+    await ensureApiKeysTable();
+
+    const { key_id } = parsed.data as { key_id: number; action: string };
+
+    const existing = await sql`
+      SELECT id FROM api_keys WHERE id = ${key_id} AND user_id = ${userId} AND revoked_at IS NULL
+    `;
+    if (existing.length === 0) {
+      return NextResponse.json({ error: "Key not found or already revoked" }, { status: 404 });
+    }
+
+    await sql`UPDATE api_keys SET revoked_at = NOW() WHERE id = ${key_id}`;
+
+    logAudit({
+      userId,
+      userEmail: email,
+      action: "platform_apikey.revoke",
+      resourceType: "api_key",
+      resourceId: key_id,
+      details: {},
+      ipAddress: ip,
+    });
+
+    return NextResponse.json({ message: "API key revoked" });
+  }
+
+  return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+}

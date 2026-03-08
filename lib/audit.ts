@@ -1,0 +1,55 @@
+import { getDb } from "@/lib/db";
+
+export type AuditAction =
+  | "login"
+  | "project.create"
+  | "project.update"
+  | "project.delete"
+  | "agent.activate"
+  | "agent.deactivate"
+  | "agent.config_update"
+  | "blocker.resolve"
+  | "settings.update"
+  | "execute.task"
+  | "subscribe.register"
+  | "org.create"
+  | "org.add_member"
+  | "org.remove_member"
+  | "org.assign_project"
+  | "org.rename"
+  | "org.update_role"
+  | "org.delete"
+  | "apikey.upsert"
+  | "apikey.delete"
+  | "platform_apikey.create"
+  | "platform_apikey.revoke";
+
+interface AuditLogParams {
+  userId: number | null;
+  userEmail: string;
+  action: AuditAction;
+  resourceType?: string;
+  resourceId?: number;
+  details?: Record<string, unknown>;
+  ipAddress?: string;
+}
+
+export async function logAudit(params: AuditLogParams) {
+  try {
+    const sql = getDb();
+    await sql`
+      INSERT INTO audit_logs (user_id, user_email, action, resource_type, resource_id, details, ip_address)
+      VALUES (
+        ${params.userId},
+        ${params.userEmail},
+        ${params.action},
+        ${params.resourceType || null},
+        ${params.resourceId || null},
+        ${JSON.stringify(params.details || {})},
+        ${params.ipAddress || null}
+      )
+    `;
+  } catch (e) {
+    console.error("Audit log failed:", e);
+  }
+}
