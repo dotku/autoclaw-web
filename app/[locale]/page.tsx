@@ -343,7 +343,7 @@ export default function Home() {
                     onClick={async () => {
                       if (plan.disabled) return;
                       if (plan.plan === "enterprise") {
-                        window.location.href = "mailto:jay.lin@jytech.us?subject=AutoClaw Enterprise Plan Inquiry";
+                        window.location.href = locale === "en" ? "mailto:jay.lin@jytech.us?subject=AutoClaw Enterprise Plan Inquiry" : "tel:+8617318011997";
                       } else if (plan.plan === "starter") {
                         window.location.href = `/auth/login?returnTo=/${locale}/dashboard/agents`;
                       } else {
@@ -372,7 +372,11 @@ export default function Home() {
             <SignupForm t={t} />
             <p className="text-gray-400 text-sm mt-6">
               {t.questionsEmail}{" "}
-              <a href="mailto:jay.lin@jytech.us" className="text-red-400 hover:underline">jay.lin@jytech.us</a>
+              {locale === "en" ? (
+                <a href="mailto:jay.lin@jytech.us" className="text-red-400 hover:underline">jay.lin@jytech.us</a>
+              ) : (
+                <a href="tel:+8617318011997" className="text-red-400 hover:underline">Helen Lan +86 17318011997</a>
+              )}
             </p>
           </div>
         </section>
@@ -397,7 +401,11 @@ export default function Home() {
             <div>
               <p className="font-semibold text-white mb-3 text-sm">{t.footerContact}</p>
               <ul className="space-y-2 text-sm">
-                <li><a href="mailto:jay.lin@jytech.us" className="hover:text-white transition-colors">jay.lin@jytech.us</a></li>
+                {locale === "en" ? (
+                  <li><a href="mailto:jay.lin@jytech.us" className="hover:text-white transition-colors">jay.lin@jytech.us</a></li>
+                ) : (
+                  <li><a href="tel:+8617318011997" className="hover:text-white transition-colors">Helen Lan +86 17318011997</a></li>
+                )}
                 <li><a href="https://jytech.us" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">jytech.us</a></li>
                 <li><a href="https://xpilot.jytech.us/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">xPilot — AI Social Media Copilot</a></li>
               </ul>
