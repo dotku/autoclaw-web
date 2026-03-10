@@ -31,6 +31,27 @@ interface Subscription {
   cancel_at_period_end: boolean;
 }
 
+interface TokenSummary {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  request_count: number;
+}
+
+interface TokenByModel {
+  model: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  request_count: number;
+}
+
+interface TokenByDate {
+  date: string;
+  total_tokens: number;
+  request_count: number;
+}
+
 function formatCurrency(amount: number, currency: string) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -44,6 +65,41 @@ function formatDate(timestamp: number) {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatNumber(n: number) {
+  return new Intl.NumberFormat("en-US").format(n);
+}
+
+// Retail pricing per 1M tokens [input, output]
+// Includes API cost + compute/infrastructure overhead
+const MODEL_PRICING: Record<string, [number, number]> = {
+  // Premium models — API + compute
+  "anthropic/claude-sonnet-4.5": [15, 75],
+  "anthropic/claude-haiku-3.5": [4, 20],
+  "anthropic/claude-opus-4": [75, 375],
+  "openai/gpt-4o": [12.5, 50],
+  "openai/gpt-4o-mini": [0.75, 3],
+  // Open models — compute cost only
+  "meta/llama-3.3-70b-instruct": [0.20, 0.20],
+  "llama-3.1-nemotron-nano-8b-v1": [0.10, 0.10],
+  "llama3.1-8b": [0.05, 0.05],
+  "gpt-oss-120b": [0.30, 0.30],
+  "qwen2.5:3b": [0.05, 0.05],
+  "qwen2.5:7b": [0.10, 0.10],
+  "gemini-2.0-flash": [0.05, 0.05],
+};
+
+function estimateCost(model: string, promptTokens: number, completionTokens: number): number {
+  const pricing = MODEL_PRICING[model];
+  if (!pricing) return 0;
+  return (promptTokens / 1_000_000) * pricing[0] + (completionTokens / 1_000_000) * pricing[1];
+}
+
+function formatCost(cost: number): string {
+  if (cost === 0) return "—";
+  if (cost < 0.01) return "<$0.01";
+  return `$${cost.toFixed(2)}`;
 }
 
 function statusBadge(status: string | null) {
@@ -79,16 +135,23 @@ export default function BillingPage() {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [userPlan, setUserPlan] = useState<string>("starter");
   const [loading, setLoading] = useState(true);
+  const [tokenSummary, setTokenSummary] = useState<TokenSummary | null>(null);
+  const [tokenByModel, setTokenByModel] = useState<TokenByModel[]>([]);
+  const [tokenByDate, setTokenByDate] = useState<TokenByDate[]>([]);
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    fetch("/api/invoices")
-      .then((r) => r.json())
-      .then((data) => {
-        setInvoices(data.invoices || []);
-        setSubscriptions(data.subscriptions || []);
-        if (data.userPlan) setUserPlan(data.userPlan);
+    const fetchBilling = fetch("/api/invoices").then((r) => r.json()).catch(() => ({}));
+    const fetchTokens = fetch("/api/token-usage").then((r) => r.json()).catch(() => ({}));
+    Promise.all([fetchBilling, fetchTokens])
+      .then(([billingData, tokenData]) => {
+        setInvoices(billingData.invoices || []);
+        setSubscriptions(billingData.subscriptions || []);
+        if (billingData.userPlan) setUserPlan(billingData.userPlan);
+        setTokenSummary(tokenData.summary || null);
+        setTokenByModel(tokenData.byModel || []);
+        setTokenByDate(tokenData.byDate || []);
       })
       .finally(() => setLoading(false));
   }, [user]);
@@ -145,6 +208,111 @@ export default function BillingPage() {
           <p className="text-gray-500">{tc.loading}</p>
         ) : (
           <>
+            {/* Token Usage Section */}
+            <section className="mb-8">
+              <h2 className="text-lg font-semibold mb-4">{td.tokenUsage}</h2>
+              {!tokenSummary || Number(tokenSummary.total_tokens) === 0 ? (
+                <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
+                  <p className="text-gray-500">{td.noTokenUsage}</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary Cards */}
+                  {(() => {
+                    const totalCost = tokenByModel.reduce((sum, row) => sum + estimateCost(row.model, Number(row.prompt_tokens), Number(row.completion_tokens)), 0);
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
+                        <div className="bg-white rounded-lg border border-gray-200 p-4">
+                          <p className="text-xs text-gray-500 mb-1">{td.estCost}</p>
+                          <p className="text-xl font-bold text-red-600">{formatCost(totalCost)}</p>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 p-4">
+                          <p className="text-xs text-gray-500 mb-1">{td.totalTokens}</p>
+                          <p className="text-xl font-bold text-gray-900">{formatNumber(Number(tokenSummary.total_tokens))}</p>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 p-4">
+                          <p className="text-xs text-gray-500 mb-1">{td.promptTokens}</p>
+                          <p className="text-xl font-bold text-gray-900">{formatNumber(Number(tokenSummary.prompt_tokens))}</p>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 p-4">
+                          <p className="text-xs text-gray-500 mb-1">{td.completionTokens}</p>
+                          <p className="text-xl font-bold text-gray-900">{formatNumber(Number(tokenSummary.completion_tokens))}</p>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 p-4">
+                          <p className="text-xs text-gray-500 mb-1">{td.requests}</p>
+                          <p className="text-xl font-bold text-gray-900">{formatNumber(Number(tokenSummary.request_count))}</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Usage by Provider/Model */}
+                  {tokenByModel.length > 0 && (
+                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-4">
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                        <h3 className="text-sm font-medium text-gray-600">{td.usageByModel}</h3>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-100">
+                              <th className="text-left px-4 py-2 font-medium text-gray-500">{td.model}</th>
+                              <th className="text-right px-4 py-2 font-medium text-gray-500">{td.totalTokens}</th>
+                              <th className="text-right px-4 py-2 font-medium text-gray-500">{td.requests}</th>
+                              <th className="text-right px-4 py-2 font-medium text-gray-500">{td.estCost}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tokenByModel.map((row, i) => {
+                              const cost = estimateCost(row.model, Number(row.prompt_tokens), Number(row.completion_tokens));
+                              return (
+                              <tr key={i} className="border-b border-gray-50 last:border-0">
+                                <td className="px-4 py-2 font-medium">{row.model}</td>
+                                <td className="px-4 py-2 text-right">{formatNumber(Number(row.total_tokens))}</td>
+                                <td className="px-4 py-2 text-right text-gray-500">{formatNumber(Number(row.request_count))}</td>
+                                <td className="px-4 py-2 text-right font-medium text-red-600">{formatCost(cost)}</td>
+                              </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Daily Usage (Last 30 Days) */}
+                  {tokenByDate.length > 0 && (
+                    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
+                        <h3 className="text-sm font-medium text-gray-600">{td.last30Days}</h3>
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="border-b border-gray-100">
+                              <th className="text-left px-4 py-2 font-medium text-gray-500">{td.date}</th>
+                              <th className="text-right px-4 py-2 font-medium text-gray-500">{td.totalTokens}</th>
+                              <th className="text-right px-4 py-2 font-medium text-gray-500">{td.requests}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tokenByDate.map((row) => (
+                              <tr key={row.date} className="border-b border-gray-50 last:border-0">
+                                <td className="px-4 py-2">{row.date}</td>
+                                <td className="px-4 py-2 text-right">{formatNumber(Number(row.total_tokens))}</td>
+                                <td className="px-4 py-2 text-right text-gray-500">{formatNumber(Number(row.request_count))}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </section>
+
+            {/* Subscriptions */}
             <section className="mb-8">
               <h2 className="text-lg font-semibold mb-4">{td.activeSubscriptions}</h2>
               {subscriptions.length === 0 ? (
@@ -185,6 +353,7 @@ export default function BillingPage() {
               )}
             </section>
 
+            {/* Invoices */}
             <section>
               <h2 className="text-lg font-semibold mb-4">{td.invoices}</h2>
               {invoices.length === 0 ? (
