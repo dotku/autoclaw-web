@@ -628,6 +628,12 @@ Keep responses concise and helpful. Use markdown formatting.`;
         { role: "user", content: message },
       ]);
       reply = aiResult.content;
+
+      // Record token usage
+      if (aiResult.usage) {
+        sql`INSERT INTO token_usage (project_id, user_id, provider, model, prompt_tokens, completion_tokens, total_tokens, source)
+            VALUES (${project_id || null}, ${userId}, ${aiResult.provider}, ${aiResult.model}, ${aiResult.usage.prompt_tokens}, ${aiResult.usage.completion_tokens}, ${aiResult.usage.total_tokens}, 'chat')`.catch(() => {});
+      }
     } catch {
       reply = `I can help you with:\n\n- **Create a project** — "Create a new project called [name]"\n- **Rename a project** — "Rename demo to autoclaw-marketing"\n- **Delete a project** — "Delete project demo"\n- **Activate agents** — "Activate email marketing and SEO"\n- **Check status** — "Show me agent status"\n- **Pause agents** — "Pause email marketing"\n- **List projects** — "Show my projects"\n\nWhat would you like to do?`;
     }

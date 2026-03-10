@@ -516,5 +516,50 @@ export async function GET(request: Request) {
     // DB query failed — continue with existing data
   }
 
-  return NextResponse.json({ reports, agents: [], serverAgents, brevoStats, brevoCampaigns, gaStats, gaProjects });
+  // Fetch token usage (last 30 days) grouped by date and project
+  let tokenUsage: { date: string; project: string; prompt_tokens: number; completion_tokens: number; total_tokens: number }[] = [];
+  let tokenSummary = { totalTokens: 0, promptTokens: 0, completionTokens: 0 };
+  try {
+    const projectIds = userProjects.map((p) => p.id as number);
+    if (projectIds.length > 0 || isAdmin) {
+      const rows = isAdmin
+        ? await sql`
+            SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
+              SUM(tu.prompt_tokens)::int as prompt_tokens,
+              SUM(tu.completion_tokens)::int as completion_tokens,
+              SUM(tu.total_tokens)::int as total_tokens
+            FROM token_usage tu
+            LEFT JOIN projects p ON tu.project_id = p.id
+            WHERE tu.created_at >= NOW() - INTERVAL '30 days'
+            GROUP BY DATE(tu.created_at), COALESCE(p.name, 'General')
+            ORDER BY date`
+        : await sql`
+            SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
+              SUM(tu.prompt_tokens)::int as prompt_tokens,
+              SUM(tu.completion_tokens)::int as completion_tokens,
+              SUM(tu.total_tokens)::int as total_tokens
+            FROM token_usage tu
+            LEFT JOIN projects p ON tu.project_id = p.id
+            WHERE (tu.project_id = ANY(${projectIds}) OR tu.user_id = ${userId})
+              AND tu.created_at >= NOW() - INTERVAL '30 days'
+            GROUP BY DATE(tu.created_at), COALESCE(p.name, 'General')
+            ORDER BY date`;
+      tokenUsage = rows.map((r) => ({
+        date: (r.date as Date).toISOString().slice(0, 10),
+        project: r.project as string,
+        prompt_tokens: r.prompt_tokens as number,
+        completion_tokens: r.completion_tokens as number,
+        total_tokens: r.total_tokens as number,
+      }));
+      for (const r of rows) {
+        tokenSummary.totalTokens += r.total_tokens as number;
+        tokenSummary.promptTokens += r.prompt_tokens as number;
+        tokenSummary.completionTokens += r.completion_tokens as number;
+      }
+    }
+  } catch {
+    // Token usage query failed — continue
+  }
+
+  return NextResponse.json({ reports, agents: [], serverAgents, brevoStats, brevoCampaigns, gaStats, gaProjects, tokenUsage, tokenSummary });
 }

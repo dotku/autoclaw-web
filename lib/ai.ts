@@ -10,6 +10,7 @@ interface AIResponse {
   content: string;
   provider: "cerebras" | "nvidia";
   model: string;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }
 
 async function callCerebras(messages: ChatMessage[], maxTokens = 500): Promise<AIResponse> {
@@ -36,6 +37,11 @@ async function callCerebras(messages: ChatMessage[], maxTokens = 500): Promise<A
     content: data.choices[0].message.content,
     provider: "cerebras",
     model: "gpt-oss-120b",
+    usage: data.usage ? {
+      prompt_tokens: data.usage.prompt_tokens || 0,
+      completion_tokens: data.usage.completion_tokens || 0,
+      total_tokens: data.usage.total_tokens || 0,
+    } : undefined,
   };
 }
 
@@ -63,6 +69,11 @@ async function callNvidia(messages: ChatMessage[], maxTokens = 500): Promise<AIR
     content: data.choices[0].message.content,
     provider: "nvidia",
     model: "meta/llama-3.1-8b-instruct",
+    usage: data.usage ? {
+      prompt_tokens: data.usage.prompt_tokens || 0,
+      completion_tokens: data.usage.completion_tokens || 0,
+      total_tokens: data.usage.total_tokens || 0,
+    } : undefined,
   };
 }
 

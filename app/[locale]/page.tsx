@@ -141,7 +141,7 @@ export default function Home() {
   ];
 
   const pricingPlans = [
-    { name: t.planStarter, price: t.planStarterPrice, period: "", description: t.planStarterDesc, features: [t.feat2Agents, t.feat100Emails, t.feat1Project, t.featCommunity, t.featBasicTemplates], cta: t.ctaStarterFree, highlight: false, plan: "starter" },
+    { name: t.planStarter, price: t.planStarterPrice, period: "", description: t.planStarterDesc, features: [t.feat2Agents, t.feat100Emails, t.feat1Project, t.featFreeModels, t.featBYOK, t.featCommunity, t.featBasicTemplates], cta: t.ctaStarterFree, highlight: false, plan: "starter" },
     { name: t.planGrowth, price: t.planGrowthPrice, period: t.perMonth, description: t.planGrowthDesc, features: [t.feat10Agents, t.feat2000Emails, t.feat5Projects, t.featCrm, t.featSeoContent, t.featSocialAuto, t.featPriority], cta: t.ctaStartTrial, highlight: true, plan: "growth" },
     { name: t.planScale, price: t.planScalePrice, period: t.perMonth, description: t.planScaleDesc, features: [t.featUnlimitedAgents, t.feat10000Emails, t.featUnlimitedProjects, t.featCustomAgent, t.featMultiChannel, t.featAdvAnalytics, t.featDedicated, t.featWhiteLabel], cta: t.ctaGetStarted, highlight: false, plan: "scale" },
     { name: t.planEnterprise, price: t.planEnterprisePrice, period: "", description: t.planEnterpriseDesc, features: [t.featEverythingScale, t.featDedicatedInfra, t.featCustomTraining, t.featSla, t.featSso, t.featOnPrem, t.featCustomApi, t.featAccountManager, t.featVolumeEmail], cta: t.ctaContactSales, highlight: false, plan: "enterprise" },

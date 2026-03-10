@@ -45,6 +45,14 @@ interface BrevoCampaign {
   sentDate?: string;
 }
 
+interface TokenUsageEntry {
+  date: string;
+  project: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+}
+
 interface MetricsSummary {
   totalTraffic: number;
   emailsSent: number;
@@ -154,6 +162,83 @@ function CombinedTrafficChart({ projects, locale, colorMap }: { projects: Projec
   );
 }
 
+function TokenUsageChart({ data, locale }: { data: TokenUsageEntry[]; locale: string }) {
+  if (data.length === 0) return null;
+
+  // Aggregate by date (stacked: prompt vs completion)
+  const byDate: Record<string, { prompt: number; completion: number }> = {};
+  for (const d of data) {
+    if (!byDate[d.date]) byDate[d.date] = { prompt: 0, completion: 0 };
+    byDate[d.date].prompt += d.prompt_tokens;
+    byDate[d.date].completion += d.completion_tokens;
+  }
+  const dates = Object.keys(byDate).sort();
+  if (dates.length === 0) return null;
+
+  const maxVal = Math.max(...dates.map((d) => byDate[d].prompt + byDate[d].completion), 1);
+  const W = 700, H = 220, padL = 50, padR = 10, padT = 10, padB = 30;
+  const chartW = W - padL - padR, chartH = H - padT - padB;
+  const barW = Math.max(4, Math.min(20, chartW / dates.length - 2));
+  const xFor = (i: number) => padL + (i + 0.5) * (chartW / dates.length);
+  const yFor = (v: number) => padT + chartH - (v / maxVal) * chartH;
+
+  const yTicks = [0, Math.round(maxVal / 2), maxVal];
+  const step = Math.max(1, Math.floor(dates.length / 6));
+  const xLabelIndices = dates.map((_, i) => i).filter((i) => i % step === 0 || i === dates.length - 1);
+  const fmtNum = (n: number) => n >= 1000000 ? (n / 1000000).toFixed(1) + "M" : n >= 1000 ? (n / 1000).toFixed(0) + "K" : String(n);
+
+  const chartTitle = locale === "zh" ? "Token 消耗趋势（近30天）" : "Token Usage Trend (Last 30 Days)";
+  const promptLabel = locale === "zh" ? "输入 Token" : "Prompt Tokens";
+  const completionLabel = locale === "zh" ? "输出 Token" : "Completion Tokens";
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+        <h3 className="font-semibold text-sm">{chartTitle}</h3>
+        <div className="flex gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: "#6366f1" }} />
+            <span className="text-xs text-gray-500">{promptLabel}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: "#a78bfa" }} />
+            <span className="text-xs text-gray-500">{completionLabel}</span>
+          </div>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[500px]" style={{ maxHeight: 240 }}>
+          {yTicks.map((tick) => (
+            <g key={tick}>
+              <line x1={padL} y1={yFor(tick)} x2={W - padR} y2={yFor(tick)} stroke="#e5e7eb" strokeWidth={0.5} />
+              <text x={padL - 4} y={yFor(tick) + 3} textAnchor="end" fontSize={9} fill="#9ca3af">{fmtNum(tick)}</text>
+            </g>
+          ))}
+          {dates.map((d, i) => {
+            const p = byDate[d].prompt;
+            const c = byDate[d].completion;
+            const total = p + c;
+            const x = xFor(i) - barW / 2;
+            return (
+              <g key={d}>
+                <rect x={x} y={yFor(total)} width={barW} height={yFor(0) - yFor(total)} fill="#6366f1" rx={1}>
+                  <title>{`${d}: ${fmtNum(p)} ${promptLabel}`}</title>
+                </rect>
+                <rect x={x} y={yFor(c)} width={barW} height={yFor(0) - yFor(c)} fill="#a78bfa" rx={1}>
+                  <title>{`${d}: ${fmtNum(c)} ${completionLabel}`}</title>
+                </rect>
+              </g>
+            );
+          })}
+          {xLabelIndices.map((i) => (
+            <text key={dates[i]} x={xFor(i)} y={H - 5} textAnchor="middle" fontSize={9} fill="#9ca3af">{dates[i].slice(5)}</text>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 const STATUS_LABELS: Record<string, Record<string, string>> = {
   en: { active: "active", pending: "pending", paused: "paused", completed: "completed", unknown: "unknown" },
   zh: { active: "运行正常", pending: "待运行", paused: "已暂停", completed: "已完成", unknown: "未知" },
@@ -220,6 +305,8 @@ export default function ReportsPage() {
   const [gaStats, setGaStats] = useState({ totalUsers: 0, sessions: 0, pageViews: 0 });
   const [gaProjects, setGaProjects] = useState<ProjectTraffic[]>([]);
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
+  const [tokenUsage, setTokenUsage] = useState<TokenUsageEntry[]>([]);
+  const [tokenSummary, setTokenSummary] = useState({ totalTokens: 0, promptTokens: 0, completionTokens: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -234,9 +321,10 @@ export default function ReportsPage() {
         if (data.gaStats) setGaStats(data.gaStats);
         if (data.gaProjects) {
           setGaProjects(data.gaProjects);
-          // Default: select all projects
           setSelectedProjects(new Set(data.gaProjects.map((p: ProjectTraffic) => p.project)));
         }
+        if (data.tokenUsage) setTokenUsage(data.tokenUsage);
+        if (data.tokenSummary) setTokenSummary(data.tokenSummary);
       })
       .finally(() => setLoading(false));
   }, [user, locale]);
@@ -388,6 +476,26 @@ export default function ReportsPage() {
                   locale={locale}
                   colorMap={Object.fromEntries(gaProjects.map((p, i) => [p.project, CHART_COLORS[i % CHART_COLORS.length]]))}
                 />
+              </section>
+            )}
+
+            {tokenUsage.length > 0 && (
+              <section className="mb-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                  <h2 className="text-lg font-semibold">{locale === "zh" ? "Token 消耗" : "Token Usage"}</h2>
+                  <div className="flex gap-3 text-sm">
+                    <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-medium">
+                      {locale === "zh" ? "总计" : "Total"}: {tokenSummary.totalTokens.toLocaleString()}
+                    </div>
+                    <div className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full font-medium">
+                      {locale === "zh" ? "输入" : "Prompt"}: {tokenSummary.promptTokens.toLocaleString()}
+                    </div>
+                    <div className="bg-violet-50 text-violet-700 px-3 py-1 rounded-full font-medium">
+                      {locale === "zh" ? "输出" : "Completion"}: {tokenSummary.completionTokens.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+                <TokenUsageChart data={tokenUsage} locale={locale} />
               </section>
             )}
 
