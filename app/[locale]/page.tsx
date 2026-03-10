@@ -315,7 +315,7 @@ export default function Home() {
               <h2 className="text-3xl md:text-4xl font-bold mb-4">{t.pricingTitle}</h2>
               <p className="text-lg text-gray-500 max-w-2xl mx-auto">{t.pricingSubtitle}</p>
             </div>
-            <p className="text-center text-sm text-gray-500 mb-8">{t.planEnterpriseOnly}</p>
+            <p className="text-center text-sm text-gray-500 mb-8">{t.planMinCommitment}</p>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
               {pricingPlans.map((plan) => (
                 <div key={plan.name} className={`rounded-xl p-8 relative ${plan.highlight ? "bg-primary text-white ring-4 ring-red-200 scale-105" : plan.disabled ? "bg-gray-50 border border-gray-200 opacity-60" : "bg-white border border-gray-200"}`}>
@@ -326,8 +326,8 @@ export default function Home() {
                     {plan.period && <span className={`text-sm ${plan.highlight ? "text-red-200" : "text-gray-400"}`}>{plan.period}</span>}
                   </div>
                   <p className={`text-sm mb-1 ${plan.highlight ? "text-red-200" : "text-gray-400"}`}>{plan.description}</p>
-                  {plan.plan === "enterprise" && <p className="text-sm text-red-200 mb-5">{t.planMinCommitment}</p>}
-                  {plan.plan !== "enterprise" && <div className="mb-6" />}
+                  {plan.minCommitment && <p className={`text-sm mb-5 ${plan.highlight ? "text-red-200" : "text-gray-400"}`}>{t.planMinCommitment}</p>}
+                  {!plan.minCommitment && <div className="mb-6" />}
                   <ul className="space-y-3 mb-8">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2 text-sm">
