@@ -141,10 +141,10 @@ export default function Home() {
   ];
 
   const pricingPlans = [
-    { name: t.planStarter, price: t.planStarterPrice, period: "", description: t.planStarterDesc, features: [t.feat2Agents, t.feat100Emails, t.feat1Project, t.featFreeModels, t.featBYOK, t.featCommunity, t.featBasicTemplates], cta: t.planComingSoon, highlight: false, plan: "starter", disabled: true },
-    { name: t.planGrowth, price: t.planGrowthPrice, period: t.perMonth, description: t.planGrowthDesc, features: [t.feat10Agents, t.feat2000Emails, t.feat5Projects, t.featCrm, t.featSeoContent, t.featSocialAuto, t.featPriority], cta: t.planComingSoon, highlight: false, plan: "growth", disabled: true },
-    { name: t.planScale, price: t.planScalePrice, period: t.perMonth, description: t.planScaleDesc, features: [t.featUnlimitedAgents, t.feat10000Emails, t.featUnlimitedProjects, t.featCustomAgent, t.featMultiChannel, t.featAdvAnalytics, t.featDedicated, t.featWhiteLabel], cta: t.planComingSoon, highlight: false, plan: "scale", disabled: true },
-    { name: t.planEnterprise, price: t.planEnterprisePrice, period: "", description: t.planEnterpriseDesc, features: [t.featEverythingScale, t.featDedicatedInfra, t.featCustomTraining, t.featSla, t.featSso, t.featOnPrem, t.featCustomApi, t.featAccountManager, t.featVolumeEmail], cta: t.ctaContactSales, highlight: true, plan: "enterprise", disabled: false },
+    { name: t.planStarter, price: t.planStarterPrice, period: "", description: t.planStarterDesc, features: [t.feat2Agents, t.feat100Emails, t.feat1Project, t.featFreeModels, t.featBYOK, t.featCommunity, t.featBasicTemplates], cta: t.planComingSoon, highlight: false, plan: "starter", disabled: true, minCommitment: false },
+    { name: t.planGrowth, price: t.planGrowthPrice, period: t.perMonth, description: t.planGrowthDesc, features: [t.feat10Agents, t.feat2000Emails, t.feat5Projects, t.featCrm, t.featSeoContent, t.featSocialAuto, t.featPriority], cta: t.ctaStartTrial, highlight: true, plan: "growth", disabled: false, minCommitment: true },
+    { name: t.planScale, price: t.planScalePrice, period: t.perMonth, description: t.planScaleDesc, features: [t.featUnlimitedAgents, t.feat10000Emails, t.featUnlimitedProjects, t.featCustomAgent, t.featMultiChannel, t.featAdvAnalytics, t.featDedicated, t.featWhiteLabel], cta: t.ctaGetStarted, highlight: false, plan: "scale", disabled: false, minCommitment: true },
+    { name: t.planEnterprise, price: t.planEnterprisePrice, period: "", description: t.planEnterpriseDesc, features: [t.featEverythingScale, t.featDedicatedInfra, t.featCustomTraining, t.featSla, t.featSso, t.featOnPrem, t.featCustomApi, t.featAccountManager, t.featVolumeEmail], cta: t.ctaContactSales, highlight: false, plan: "enterprise", disabled: false, minCommitment: true },
   ];
 
   const stats = [
