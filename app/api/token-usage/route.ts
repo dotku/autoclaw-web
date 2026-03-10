@@ -53,7 +53,7 @@ export async function GET() {
     JOIN organization_members om2 ON om1.org_id = om2.org_id
     WHERE om1.user_id = ${userId}
   `;
-  const visibleUserIds = [userId, ...orgMemberIds.map((r: { user_id: number }) => r.user_id)];
+  const visibleUserIds = [userId, ...orgMemberIds.map((r) => (r as Record<string, number>).user_id)];
 
   // Admin sees all token usage; org members see org-wide usage; others see only their own
   const [summary, byModel, byDate] = isAdmin

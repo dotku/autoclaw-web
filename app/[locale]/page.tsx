@@ -141,10 +141,10 @@ export default function Home() {
   ];
 
   const pricingPlans = [
-    { name: t.planStarter, price: t.planStarterPrice, period: "", description: t.planStarterDesc, features: [t.feat2Agents, t.feat100Emails, t.feat1Project, t.featFreeModels, t.featBYOK, t.featCommunity, t.featBasicTemplates], cta: t.ctaStarterFree, highlight: false, plan: "starter" },
-    { name: t.planGrowth, price: t.planGrowthPrice, period: t.perMonth, description: t.planGrowthDesc, features: [t.feat10Agents, t.feat2000Emails, t.feat5Projects, t.featCrm, t.featSeoContent, t.featSocialAuto, t.featPriority], cta: t.ctaStartTrial, highlight: true, plan: "growth" },
-    { name: t.planScale, price: t.planScalePrice, period: t.perMonth, description: t.planScaleDesc, features: [t.featUnlimitedAgents, t.feat10000Emails, t.featUnlimitedProjects, t.featCustomAgent, t.featMultiChannel, t.featAdvAnalytics, t.featDedicated, t.featWhiteLabel], cta: t.ctaGetStarted, highlight: false, plan: "scale" },
-    { name: t.planEnterprise, price: t.planEnterprisePrice, period: "", description: t.planEnterpriseDesc, features: [t.featEverythingScale, t.featDedicatedInfra, t.featCustomTraining, t.featSla, t.featSso, t.featOnPrem, t.featCustomApi, t.featAccountManager, t.featVolumeEmail], cta: t.ctaContactSales, highlight: false, plan: "enterprise" },
+    { name: t.planStarter, price: t.planStarterPrice, period: "", description: t.planStarterDesc, features: [t.feat2Agents, t.feat100Emails, t.feat1Project, t.featFreeModels, t.featBYOK, t.featCommunity, t.featBasicTemplates], cta: t.planComingSoon, highlight: false, plan: "starter", disabled: true },
+    { name: t.planGrowth, price: t.planGrowthPrice, period: t.perMonth, description: t.planGrowthDesc, features: [t.feat10Agents, t.feat2000Emails, t.feat5Projects, t.featCrm, t.featSeoContent, t.featSocialAuto, t.featPriority], cta: t.planComingSoon, highlight: false, plan: "growth", disabled: true },
+    { name: t.planScale, price: t.planScalePrice, period: t.perMonth, description: t.planScaleDesc, features: [t.featUnlimitedAgents, t.feat10000Emails, t.featUnlimitedProjects, t.featCustomAgent, t.featMultiChannel, t.featAdvAnalytics, t.featDedicated, t.featWhiteLabel], cta: t.planComingSoon, highlight: false, plan: "scale", disabled: true },
+    { name: t.planEnterprise, price: t.planEnterprisePrice, period: "", description: t.planEnterpriseDesc, features: [t.featEverythingScale, t.featDedicatedInfra, t.featCustomTraining, t.featSla, t.featSso, t.featOnPrem, t.featCustomApi, t.featAccountManager, t.featVolumeEmail], cta: t.ctaContactSales, highlight: true, plan: "enterprise", disabled: false },
   ];
 
   const stats = [
@@ -315,19 +315,23 @@ export default function Home() {
               <h2 className="text-3xl md:text-4xl font-bold mb-4">{t.pricingTitle}</h2>
               <p className="text-lg text-gray-500 max-w-2xl mx-auto">{t.pricingSubtitle}</p>
             </div>
+            <p className="text-center text-sm text-gray-500 mb-8">{t.planEnterpriseOnly}</p>
             <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
               {pricingPlans.map((plan) => (
-                <div key={plan.name} className={`rounded-xl p-8 ${plan.highlight ? "bg-primary text-white ring-4 ring-red-200 scale-105" : "bg-white border border-gray-200"}`}>
+                <div key={plan.name} className={`rounded-xl p-8 relative ${plan.highlight ? "bg-primary text-white ring-4 ring-red-200 scale-105" : plan.disabled ? "bg-gray-50 border border-gray-200 opacity-60" : "bg-white border border-gray-200"}`}>
+                  {plan.disabled && <span className="absolute top-3 right-3 bg-gray-200 text-gray-500 text-xs font-medium px-2 py-0.5 rounded-full">{t.planComingSoon}</span>}
                   <h3 className={`text-lg font-semibold mb-1 ${plan.highlight ? "text-red-100" : "text-gray-500"}`}>{plan.name}</h3>
                   <div className="mb-2">
                     <span className="text-4xl font-bold">{plan.price}</span>
                     {plan.period && <span className={`text-sm ${plan.highlight ? "text-red-200" : "text-gray-400"}`}>{plan.period}</span>}
                   </div>
-                  <p className={`text-sm mb-6 ${plan.highlight ? "text-red-200" : "text-gray-400"}`}>{plan.description}</p>
+                  <p className={`text-sm mb-1 ${plan.highlight ? "text-red-200" : "text-gray-400"}`}>{plan.description}</p>
+                  {plan.plan === "enterprise" && <p className="text-sm text-red-200 mb-5">{t.planMinCommitment}</p>}
+                  {plan.plan !== "enterprise" && <div className="mb-6" />}
                   <ul className="space-y-3 mb-8">
                     {plan.features.map((feature) => (
                       <li key={feature} className="flex items-start gap-2 text-sm">
-                        <svg className={`w-5 h-5 shrink-0 mt-0.5 ${plan.highlight ? "text-red-200" : "text-green-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <svg className={`w-5 h-5 shrink-0 mt-0.5 ${plan.highlight ? "text-red-200" : plan.disabled ? "text-gray-400" : "text-green-500"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                         </svg>
                         {feature}
@@ -335,7 +339,9 @@ export default function Home() {
                     ))}
                   </ul>
                   <button
+                    disabled={plan.disabled}
                     onClick={async () => {
+                      if (plan.disabled) return;
                       if (plan.plan === "enterprise") {
                         window.location.href = "mailto:jay.lin@jytech.us?subject=AutoClaw Enterprise Plan Inquiry";
                       } else if (plan.plan === "starter") {
@@ -348,7 +354,7 @@ export default function Home() {
                         } catch { window.location.href = `/auth/login?returnTo=/${locale}/dashboard/agents`; }
                       }
                     }}
-                    className={`block w-full text-center py-3 rounded-lg font-medium transition-colors cursor-pointer ${plan.highlight ? "bg-white text-primary hover:bg-red-50" : "bg-primary text-white hover:bg-primary-dark"}`}
+                    className={`block w-full text-center py-3 rounded-lg font-medium transition-colors ${plan.disabled ? "bg-gray-300 text-gray-500 cursor-not-allowed" : plan.highlight ? "bg-white text-primary hover:bg-red-50 cursor-pointer" : "bg-primary text-white hover:bg-primary-dark cursor-pointer"}`}
                   >
                     {plan.cta}
                   </button>
