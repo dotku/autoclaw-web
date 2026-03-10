@@ -156,18 +156,19 @@ export async function GET(request: Request) {
 
   // Look up user and their projects + role
   const sql = getDb();
-  let users = await sql`SELECT id, role FROM users WHERE email = ${email}`;
+  let users = await sql`SELECT id, role, plan FROM users WHERE email = ${email}`;
   if (users.length === 0) {
-    users = await sql`INSERT INTO users (email, name, auth0_id) VALUES (${email}, ${(session.user.name as string) || ""}, ${session.user.sub as string}) RETURNING id, role`;
+    users = await sql`INSERT INTO users (email, name, auth0_id) VALUES (${email}, ${(session.user.name as string) || ""}, ${session.user.sub as string}) RETURNING id, role, plan`;
   }
   const userId = users[0].id;
   const isAdmin = users[0].role === "admin";
+  const isEnterprise = users[0].plan === "enterprise";
 
   // Extract email domain for domain-based project sharing (enterprise feature)
   const emailDomain = email.split("@")[1] || "";
   const userProjects = isAdmin
-    ? await sql`SELECT name, ga_property_id FROM projects`
-    : await sql`SELECT DISTINCT ON (name) name, ga_property_id FROM projects WHERE user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}) ORDER BY name`;
+    ? await sql`SELECT id, name, ga_property_id FROM projects`
+    : await sql`SELECT DISTINCT ON (name) id, name, ga_property_id FROM projects WHERE user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}) ORDER BY name`;
   const userProjectNames = userProjects.map((p) => p.name as string);
   // Use first project name as default label for "General" jobs
   const defaultProjectName = userProjectNames[0] || "General";
@@ -521,8 +522,9 @@ export async function GET(request: Request) {
   let tokenSummary = { totalTokens: 0, promptTokens: 0, completionTokens: 0 };
   try {
     const projectIds = userProjects.map((p) => p.id as number);
-    if (projectIds.length > 0 || isAdmin) {
-      const rows = isAdmin
+    if (projectIds.length > 0 || isAdmin || isEnterprise) {
+      // Enterprise users see all token usage (like admin) since they pay for the platform
+      const rows = (isAdmin || isEnterprise)
         ? await sql`
             SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
               SUM(tu.prompt_tokens)::int as prompt_tokens,
