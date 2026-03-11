@@ -141,6 +141,12 @@ export default function BillingPage() {
   const [tokenByDate, setTokenByDate] = useState<TokenByDate[]>([]);
   const [upgrading, setUpgrading] = useState<string | null>(null);
   const [apiKeys, setApiKeys] = useState<{ service: string; masked_key: string }[]>([]);
+  const [budgetLimit, setBudgetLimit] = useState<string>("");
+  const [totalBudgetLimit, setTotalBudgetLimit] = useState<string>("");
+  const [alertThresholds, setAlertThresholds] = useState<boolean[]>([false, true, true]); // 50%, 80%, 100%
+  const [autoPause, setAutoPause] = useState(true);
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetMsg, setBudgetMsg] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -148,8 +154,9 @@ export default function BillingPage() {
     const fetchBilling = fetch("/api/invoices").then((r) => r.json()).catch(() => ({}));
     const fetchTokens = fetch("/api/token-usage").then((r) => r.json()).catch(() => ({}));
     const fetchKeys = fetch("/api/api-keys").then((r) => r.json()).catch(() => ({}));
-    Promise.all([fetchBilling, fetchTokens, fetchKeys])
-      .then(([billingData, tokenData, keyData]) => {
+    const fetchBudget = fetch("/api/budget").then((r) => r.json()).catch(() => ({}));
+    Promise.all([fetchBilling, fetchTokens, fetchKeys, fetchBudget])
+      .then(([billingData, tokenData, keyData, budgetData]) => {
         setInvoices(billingData.invoices || []);
         setSubscriptions(billingData.subscriptions || []);
         if (billingData.userPlan) setUserPlan(billingData.userPlan);
@@ -157,6 +164,10 @@ export default function BillingPage() {
         setTokenByModel(tokenData.byModel || []);
         setApiKeys(keyData.keys || []);
         setTokenByDate(tokenData.byDate || []);
+        if (budgetData.monthly_limit != null) setBudgetLimit(String(budgetData.monthly_limit));
+        if (budgetData.total_limit != null) setTotalBudgetLimit(String(budgetData.total_limit));
+        if (budgetData.alert_thresholds) setAlertThresholds([50, 80, 100].map((v) => budgetData.alert_thresholds.includes(v)));
+        if (budgetData.auto_pause != null) setAutoPause(budgetData.auto_pause);
       })
       .finally(() => setLoading(false));
   }, [user]);
@@ -378,6 +389,196 @@ export default function BillingPage() {
                 <Link href={`/${locale}/dashboard/settings`} className="text-sm text-red-600 hover:text-red-700 font-medium">
                   {td.byokManageKeys} →
                 </Link>
+              </div>
+            </section>
+
+            {/* Budget Controls Section */}
+            <section className="mb-8">
+              <h2 className="text-lg font-semibold mb-4">{td.budgetTitle}</h2>
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <p className="text-sm text-gray-500 mb-5">{td.budgetDesc}</p>
+
+                {/* Budget overview bar */}
+                {(() => {
+                  const totalCost = tokenByModel.reduce((sum, row) => sum + estimateCost(row.model, Number(row.prompt_tokens), Number(row.completion_tokens)), 0);
+                  const limit = budgetLimit ? parseFloat(budgetLimit) : 0;
+                  const pct = limit > 0 ? Math.min((totalCost / limit) * 100, 100) : 0;
+                  const barColor = !limit ? "bg-gray-200" : pct >= 100 ? "bg-red-500" : pct >= 80 ? "bg-amber-500" : "bg-emerald-500";
+                  const statusLabel = !limit ? td.noBudgetSet : pct >= 100 ? td.budgetExceeded : pct >= 80 ? td.budgetWarning : td.budgetHealthy;
+                  const statusColor = !limit ? "text-gray-400" : pct >= 100 ? "text-red-600" : pct >= 80 ? "text-amber-600" : "text-emerald-600";
+
+                  return (
+                    <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium ${statusColor}`}>{statusLabel}</span>
+                        </div>
+                        <span className="text-xs text-gray-400">{td.budgetReset}</span>
+                      </div>
+                      <div className="flex items-end justify-between mb-2">
+                        <div>
+                          <span className="text-2xl font-bold">{formatCost(totalCost)}</span>
+                          {limit > 0 && <span className="text-sm text-gray-400 ml-1">/ ${limit.toFixed(2)}</span>}
+                        </div>
+                        {limit > 0 && (
+                          <span className="text-sm text-gray-500">{td.budgetRemaining}: {formatCost(Math.max(limit - totalCost, 0))}</span>
+                        )}
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3">
+                        <div className={`${barColor} h-3 rounded-full transition-all`} style={{ width: `${limit > 0 ? pct : 0}%` }} />
+                      </div>
+                      {limit > 0 && (
+                        <p className="text-xs text-gray-400 mt-1 text-right">{pct.toFixed(1)}% {td.budgetUsed}</p>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Total budget bar */}
+                {(() => {
+                  const totalCost = tokenByModel.reduce((sum, row) => sum + estimateCost(row.model, Number(row.prompt_tokens), Number(row.completion_tokens)), 0);
+                  const totalCap = totalBudgetLimit ? parseFloat(totalBudgetLimit) : 0;
+                  const totalPct = totalCap > 0 ? Math.min((totalCost / totalCap) * 100, 100) : 0;
+                  const totalBarColor = !totalCap ? "bg-gray-200" : totalPct >= 100 ? "bg-red-500" : totalPct >= 80 ? "bg-amber-500" : "bg-blue-500";
+
+                  return totalCap > 0 ? (
+                    <div className="mb-6 p-4 bg-blue-50/50 rounded-lg border border-blue-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium text-blue-700">{td.totalBudget}</span>
+                        <span className="text-xs text-gray-400">{td.totalSpend}</span>
+                      </div>
+                      <div className="flex items-end justify-between mb-2">
+                        <div>
+                          <span className="text-2xl font-bold">{formatCost(totalCost)}</span>
+                          <span className="text-sm text-gray-400 ml-1">/ ${totalCap.toFixed(2)}</span>
+                        </div>
+                        <span className="text-sm text-gray-500">{td.budgetRemaining}: {formatCost(Math.max(totalCap - totalCost, 0))}</span>
+                      </div>
+                      <div className="w-full bg-blue-100 rounded-full h-3">
+                        <div className={`${totalBarColor} h-3 rounded-full transition-all`} style={{ width: `${totalPct}%` }} />
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1 text-right">{totalPct.toFixed(1)}% {td.budgetUsed}</p>
+                      {totalPct >= 100 && (
+                        <p className="text-xs text-red-600 font-medium mt-2">{td.totalBudgetExceeded}</p>
+                      )}
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* Budget limit inputs */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{td.monthlyBudget}</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="10"
+                        value={budgetLimit}
+                        onChange={(e) => setBudgetLimit(e.target.value)}
+                        placeholder={td.budgetPlaceholder}
+                        className="w-full border border-gray-300 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">{!budgetLimit ? td.budgetUnlimited : `$${parseFloat(budgetLimit || "0").toFixed(2)} / ${td.billingCycleMonthly.replace("/", "")}`}</p>
+                  </div>
+
+                  {/* Total budget input */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{td.totalBudget}</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="100"
+                        value={totalBudgetLimit}
+                        onChange={(e) => setTotalBudgetLimit(e.target.value)}
+                        placeholder={td.totalBudgetPlaceholder}
+                        className="w-full border border-gray-300 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">{!totalBudgetLimit ? td.totalBudgetUnlimited : td.totalBudgetDesc}</p>
+                  </div>
+                </div>
+
+                {/* Alert thresholds */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{td.alertThresholds}</label>
+                    <p className="text-xs text-gray-400 mb-2">{td.alertDesc}</p>
+                    <div className="flex flex-col gap-2">
+                      {[50, 80, 100].map((pct, i) => (
+                        <label key={pct} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={alertThresholds[i]}
+                            onChange={() => {
+                              const next = [...alertThresholds];
+                              next[i] = !next[i];
+                              setAlertThresholds(next);
+                            }}
+                            className="rounded border-gray-300 text-red-600 focus:ring-red-500"
+                          />
+                          <span className="text-sm text-gray-600">{td.alertAt} {pct}%</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auto-pause toggle */}
+                <div className="mt-6 pt-5 border-t border-gray-100">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-700">{td.autoPause}</h4>
+                      <p className="text-xs text-gray-400 mt-0.5">{td.autoPauseDesc}</p>
+                    </div>
+                    <button
+                      onClick={() => setAutoPause(!autoPause)}
+                      className={`relative shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${autoPause ? "bg-red-600" : "bg-gray-300"}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${autoPause ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
+                  </div>
+                  <p className={`text-xs mt-2 ${autoPause ? "text-red-600" : "text-gray-400"}`}>
+                    {autoPause ? td.autoPauseEnabled : td.autoPauseDisabled}
+                  </p>
+                </div>
+
+                {/* Save button */}
+                <div className="mt-5 flex items-center gap-3">
+                  <button
+                    onClick={async () => {
+                      setBudgetSaving(true);
+                      setBudgetMsg("");
+                      try {
+                        await fetch("/api/budget", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            monthly_limit: budgetLimit ? parseFloat(budgetLimit) : null,
+                            total_limit: totalBudgetLimit ? parseFloat(totalBudgetLimit) : null,
+                            alert_thresholds: [50, 80, 100].filter((_, i) => alertThresholds[i]),
+                            auto_pause: autoPause,
+                          }),
+                        });
+                        setBudgetMsg(td.budgetSaved);
+                        setTimeout(() => setBudgetMsg(""), 3000);
+                      } catch {
+                        setBudgetMsg("Error");
+                      } finally {
+                        setBudgetSaving(false);
+                      }
+                    }}
+                    disabled={budgetSaving}
+                    className="bg-red-800 hover:bg-red-900 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                  >
+                    {budgetSaving ? "..." : td.saveBudget}
+                  </button>
+                  {budgetMsg && <span className="text-sm text-green-600">{budgetMsg}</span>}
+                </div>
               </div>
             </section>
 

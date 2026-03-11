@@ -7,17 +7,28 @@ import { getDictionary, type Locale } from "@/lib/i18n";
 import DashboardShell from "@/components/DashboardShell";
 
 type Tab = "templates" | "my";
+type WorkflowStatus = "active" | "draft" | "paused";
 
 interface WorkflowStep {
   type: "trigger" | "action" | "condition" | "end";
   labelKey: string;
 }
 
+interface Workflow {
+  id: string;
+  key: string;
+  name: string;
+  desc: string;
+  steps: WorkflowStep[];
+  runs: number;
+  status: WorkflowStatus;
+  createdAt: string;
+  lastRun: string | null;
+}
+
 interface WorkflowTemplate {
   key: string;
   steps: WorkflowStep[];
-  runs: number;
-  status: "active" | "draft" | "paused";
 }
 
 const TEMPLATES: WorkflowTemplate[] = [
@@ -33,8 +44,6 @@ const TEMPLATES: WorkflowTemplate[] = [
       { type: "action", labelKey: "actionNotify" },
       { type: "end", labelKey: "endLabel" },
     ],
-    runs: 0,
-    status: "draft",
   },
   {
     key: "tmplContentPromo",
@@ -46,8 +55,6 @@ const TEMPLATES: WorkflowTemplate[] = [
       { type: "action", labelKey: "actionRunAgent" },
       { type: "end", labelKey: "endLabel" },
     ],
-    runs: 0,
-    status: "draft",
   },
   {
     key: "tmplLeadNurture",
@@ -61,8 +68,6 @@ const TEMPLATES: WorkflowTemplate[] = [
       { type: "action", labelKey: "actionAddToCrm" },
       { type: "end", labelKey: "endLabel" },
     ],
-    runs: 0,
-    status: "draft",
   },
   {
     key: "tmplReEngagement",
@@ -74,8 +79,6 @@ const TEMPLATES: WorkflowTemplate[] = [
       { type: "action", labelKey: "actionSendEmail" },
       { type: "end", labelKey: "endLabel" },
     ],
-    runs: 0,
-    status: "draft",
   },
   {
     key: "tmplWebinarFunnel",
@@ -89,8 +92,6 @@ const TEMPLATES: WorkflowTemplate[] = [
       { type: "action", labelKey: "actionSendEmail" },
       { type: "end", labelKey: "endLabel" },
     ],
-    runs: 0,
-    status: "draft",
   },
   {
     key: "tmplReviewRequest",
@@ -103,9 +104,13 @@ const TEMPLATES: WorkflowTemplate[] = [
       { type: "action", labelKey: "actionSendEmail" },
       { type: "end", labelKey: "endLabel" },
     ],
-    runs: 0,
-    status: "draft",
   },
+];
+
+const BLANK_STEPS: WorkflowStep[] = [
+  { type: "trigger", labelKey: "triggerNewLead" },
+  { type: "action", labelKey: "actionSendEmail" },
+  { type: "end", labelKey: "endLabel" },
 ];
 
 const STEP_STYLES: Record<string, { bg: string; border: string; text: string; dot: string }> = {
@@ -121,16 +126,95 @@ const STATUS_STYLES: Record<string, string> = {
   paused: "bg-yellow-100 text-yellow-700",
 };
 
+function StepTimeline({ steps, tw }: { steps: WorkflowStep[]; tw: Record<string, string> }) {
+  return (
+    <div className="relative">
+      {steps.map((step, i) => {
+        const style = STEP_STYLES[step.type];
+        const label = tw[step.labelKey] || step.labelKey;
+        const isLast = i === steps.length - 1;
+
+        return (
+          <div key={i} className="flex items-start gap-3 relative">
+            <div className="flex flex-col items-center">
+              <div className={`w-3 h-3 rounded-full ${style.dot} shrink-0 mt-1.5 z-10`} />
+              {!isLast && <div className="w-0.5 h-full bg-gray-200 absolute top-4 left-1.5" />}
+            </div>
+            <div className={`flex-1 mb-2 px-3 py-2 rounded-md border text-xs font-medium ${style.bg} ${style.border} ${style.text}`}>
+              <span className="uppercase text-[10px] opacity-60 mr-1.5">
+                {step.type === "trigger" ? tw.triggerLabel :
+                 step.type === "condition" ? tw.ifLabel :
+                 step.type === "end" ? tw.endLabel : tw.thenLabel}
+              </span>
+              {label}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function WorkflowsPage() {
   const params = useParams();
   const locale = (params.locale as Locale) || "en";
   const dict = getDictionary(locale);
-  const tw = dict.workflowsPage;
+  const tw = dict.workflowsPage as Record<string, string>;
   const tc = dict.common;
 
   const { user, isLoading: userLoading } = useUser();
   const [tab, setTab] = useState<Tab>("templates");
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
+  const [myWorkflows, setMyWorkflows] = useState<Workflow[]>([]);
+  const [expandedWorkflow, setExpandedWorkflow] = useState<string | null>(null);
+
+  function addFromTemplate(tmpl: WorkflowTemplate) {
+    const name = tw[tmpl.key] || tmpl.key;
+    const desc = tw[`${tmpl.key}Desc`] || "";
+    const workflow: Workflow = {
+      id: `wf_${Date.now()}`,
+      key: tmpl.key,
+      name,
+      desc,
+      steps: [...tmpl.steps],
+      runs: 0,
+      status: "draft",
+      createdAt: new Date().toISOString(),
+      lastRun: null,
+    };
+    setMyWorkflows((prev) => [workflow, ...prev]);
+    setTab("my");
+  }
+
+  function createBlank() {
+    const workflow: Workflow = {
+      id: `wf_${Date.now()}`,
+      key: "custom",
+      name: tw.createWorkflow,
+      desc: "",
+      steps: [...BLANK_STEPS],
+      runs: 0,
+      status: "draft",
+      createdAt: new Date().toISOString(),
+      lastRun: null,
+    };
+    setMyWorkflows((prev) => [workflow, ...prev]);
+    setTab("my");
+  }
+
+  function toggleStatus(id: string) {
+    setMyWorkflows((prev) =>
+      prev.map((w) =>
+        w.id === id
+          ? { ...w, status: w.status === "active" ? "paused" : "active" as WorkflowStatus }
+          : w
+      )
+    );
+  }
+
+  function deleteWorkflow(id: string) {
+    setMyWorkflows((prev) => prev.filter((w) => w.id !== id));
+  }
 
   if (userLoading) {
     return (
@@ -160,7 +244,10 @@ export default function WorkflowsPage() {
             <h1 className="text-2xl font-bold">{tw.title}</h1>
             <p className="text-sm text-gray-500 mt-1">{tw.subtitle}</p>
           </div>
-          <button className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap">
+          <button
+            onClick={createBlank}
+            className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap"
+          >
             + {tw.createWorkflow}
           </button>
         </div>
@@ -182,37 +269,108 @@ export default function WorkflowsPage() {
             }`}
           >
             {tw.myWorkflows}
+            {myWorkflows.length > 0 && (
+              <span className="ml-1.5 bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full text-xs">{myWorkflows.length}</span>
+            )}
           </button>
         </div>
 
         {tab === "my" ? (
-          /* My Workflows - empty state */
-          <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-              </svg>
+          myWorkflows.length === 0 ? (
+            /* Empty state */
+            <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-700 mb-1">{tw.noWorkflows}</h3>
+              <p className="text-sm text-gray-500 mb-4">{tw.noWorkflowsDesc}</p>
+              <div className="flex gap-3 justify-center">
+                <button
+                  onClick={createBlank}
+                  className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                >
+                  {tw.fromScratch}
+                </button>
+                <button
+                  onClick={() => setTab("templates")}
+                  className="border border-gray-300 hover:border-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                >
+                  {tw.useTemplate}
+                </button>
+              </div>
             </div>
-            <h3 className="font-semibold text-gray-700 mb-1">{tw.noWorkflows}</h3>
-            <p className="text-sm text-gray-500 mb-4">{tw.noWorkflowsDesc}</p>
-            <div className="flex gap-3 justify-center">
-              <button className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
-                {tw.fromScratch}
-              </button>
-              <button
-                onClick={() => setTab("templates")}
-                className="border border-gray-300 hover:border-gray-400 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
-              >
-                {tw.useTemplate}
-              </button>
+          ) : (
+            /* My workflows list */
+            <div className="space-y-3">
+              {myWorkflows.map((wf) => {
+                const isExpanded = expandedWorkflow === wf.id;
+
+                return (
+                  <div key={wf.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                    <div className="p-5">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm truncate">{wf.name}</h3>
+                          {wf.desc && <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{wf.desc}</p>}
+                        </div>
+                        <div className="flex items-center gap-2 ml-3 shrink-0">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[wf.status]}`}>
+                            {tw[wf.status]}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-3">
+                        <div className="flex items-center gap-4 text-xs text-gray-400">
+                          <span>{wf.steps.length} {tw.steps}</span>
+                          <span>{wf.runs} {tw.runs}</span>
+                          <span>{tw.lastRun}: {wf.lastRun ? new Date(wf.lastRun).toLocaleDateString() : tw.never}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleStatus(wf.id)}
+                            className={`text-xs font-medium cursor-pointer px-2 py-1 rounded transition-colors ${
+                              wf.status === "active"
+                                ? "text-yellow-600 hover:bg-yellow-50"
+                                : "text-green-600 hover:bg-green-50"
+                            }`}
+                          >
+                            {wf.status === "active" ? "⏸" : "▶"}
+                          </button>
+                          <button
+                            onClick={() => setExpandedWorkflow(isExpanded ? null : wf.id)}
+                            className="text-xs text-red-700 hover:text-red-900 font-medium cursor-pointer"
+                          >
+                            {isExpanded ? "▲" : "▼"}
+                          </button>
+                          <button
+                            onClick={() => deleteWorkflow(wf.id)}
+                            className="text-xs text-gray-400 hover:text-red-600 cursor-pointer"
+                          >
+                            {tc.delete}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+                        <StepTimeline steps={wf.steps} tw={tw} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          )
         ) : (
           /* Templates grid */
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {TEMPLATES.map((tmpl) => {
-              const name = tw[tmpl.key as keyof typeof tw] as string;
-              const desc = tw[`${tmpl.key}Desc` as keyof typeof tw] as string;
+              const name = tw[tmpl.key] || tmpl.key;
+              const desc = tw[`${tmpl.key}Desc`] || "";
               const isExpanded = expandedCard === tmpl.key;
 
               return (
@@ -223,58 +381,29 @@ export default function WorkflowsPage() {
                   <div className="p-5">
                     <div className="flex items-start justify-between mb-2">
                       <h3 className="font-semibold text-sm">{name}</h3>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[tmpl.status]}`}>
-                        {tw[tmpl.status as keyof typeof tw] as string}
-                      </span>
+                      <span className="text-xs text-gray-400">{tmpl.steps.length} {tw.steps}</span>
                     </div>
                     <p className="text-xs text-gray-500 mb-3">{desc}</p>
 
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3 text-xs text-gray-400">
-                        <span>{tmpl.steps.length} {tw.steps}</span>
-                      </div>
+                      <button
+                        onClick={() => addFromTemplate(tmpl)}
+                        className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer"
+                      >
+                        {tw.useTemplate}
+                      </button>
                       <button
                         onClick={() => setExpandedCard(isExpanded ? null : tmpl.key)}
-                        className="text-xs text-red-700 hover:text-red-900 font-medium cursor-pointer"
+                        className="text-xs text-gray-500 hover:text-gray-700 font-medium cursor-pointer"
                       >
                         {isExpanded ? "▲" : "▼"} {tw.steps}
                       </button>
                     </div>
                   </div>
 
-                  {/* Expanded step view */}
                   {isExpanded && (
                     <div className="px-5 pb-5 border-t border-gray-100 pt-4">
-                      <div className="relative">
-                        {tmpl.steps.map((step, i) => {
-                          const style = STEP_STYLES[step.type];
-                          const label = tw[step.labelKey as keyof typeof tw] as string;
-                          const isLast = i === tmpl.steps.length - 1;
-
-                          return (
-                            <div key={i} className="flex items-start gap-3 relative">
-                              {/* Vertical line */}
-                              <div className="flex flex-col items-center">
-                                <div className={`w-3 h-3 rounded-full ${style.dot} shrink-0 mt-1.5 z-10`} />
-                                {!isLast && <div className="w-0.5 h-full bg-gray-200 absolute top-4 left-1.5" />}
-                              </div>
-                              {/* Step card */}
-                              <div className={`flex-1 mb-2 px-3 py-2 rounded-md border text-xs font-medium ${style.bg} ${style.border} ${style.text}`}>
-                                <span className="uppercase text-[10px] opacity-60 mr-1.5">
-                                  {step.type === "trigger" ? tw.triggerLabel :
-                                   step.type === "condition" ? tw.ifLabel :
-                                   step.type === "end" ? tw.endLabel : tw.thenLabel}
-                                </span>
-                                {label}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <button className="mt-3 w-full bg-red-800 hover:bg-red-900 text-white py-2 rounded-lg text-xs font-medium transition-colors cursor-pointer">
-                        {tw.useTemplate}
-                      </button>
+                      <StepTimeline steps={tmpl.steps} tw={tw} />
                     </div>
                   )}
                 </div>
