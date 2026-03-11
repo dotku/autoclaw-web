@@ -40,7 +40,7 @@ export default function WeChatGuard() {
               navigator.clipboard.writeText(window.location.href);
             }
           }}
-          className="bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
+          className="bg-red-800 hover:bg-red-900 text-white px-6 py-2.5 rounded-lg text-sm font-medium transition-colors"
         >
           复制链接
         </button>

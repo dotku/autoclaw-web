@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
-import { getDb } from "@/lib/db";
+import { getDb, resolveUserPlan } from "@/lib/db";
+import { getUsageStats } from "@/lib/embeddings";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ const FREE_DAILY_TOKENS: Record<string, number> = {
 export async function GET() {
   const sql = getDb();
 
-  const [totals, today, byProvider, last7Days, userCount] = await Promise.all([
+  const [totals, today, byProvider, last7Days, userCount, embeddingUsage] = await Promise.all([
     sql`SELECT
       COALESCE(SUM(prompt_tokens), 0)::bigint as prompt_tokens,
       COALESCE(SUM(completion_tokens), 0)::bigint as completion_tokens,
@@ -64,6 +65,8 @@ export async function GET() {
     ORDER BY date ASC`,
 
     sql`SELECT COUNT(*)::int as count FROM users`,
+
+    getUsageStats(sql),
   ]);
 
   const now = new Date();
@@ -76,6 +79,7 @@ export async function GET() {
     last7Days,
     users: userCount[0].count,
     nextResetUtc: nextReset.toISOString(),
+    embedding: embeddingUsage,
   };
 
   // If logged in, add per-user quota info
@@ -86,7 +90,7 @@ export async function GET() {
       const users = await sql`SELECT id, plan FROM users WHERE email = ${email}`;
       if (users.length > 0) {
         const userId = users[0].id;
-        const userPlan = (users[0].plan as string) || "starter";
+        const userPlan = await resolveUserPlan(sql, userId, (users[0].plan as string) || "starter", email);
 
         const userToday = await sql`
           SELECT provider, SUM(prompt_tokens)::bigint as prompt_tokens, SUM(completion_tokens)::bigint as completion_tokens, SUM(total_tokens)::bigint as total_tokens, COUNT(*)::int as request_count

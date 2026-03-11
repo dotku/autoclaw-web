@@ -22,7 +22,7 @@ export default async function SuccessPage({ params }: { params: Promise<{ locale
         </div>
         <h1 className="text-3xl font-bold mb-4">{t.title}</h1>
         <p className="text-gray-500 mb-8">{t.message}</p>
-        <Link href={`/${locale}`} className="inline-block bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">
+        <Link href={`/${locale}`} className="inline-block bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors">
           {t.backHome}
         </Link>
       </div>

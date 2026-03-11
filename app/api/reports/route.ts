@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
-import { getDb } from "@/lib/db";
+import { getDb, resolveUserPlan } from "@/lib/db";
 import { exec } from "child_process";
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
 
@@ -447,7 +447,8 @@ export async function GET(request: Request) {
   }
   const userId = users[0].id;
   const isAdmin = users[0].role === "admin";
-  const isEnterprise = users[0].plan === "enterprise";
+  const userPlan = await resolveUserPlan(sql, userId, (users[0].plan as string) || "starter", email);
+  const isEnterprise = userPlan === "enterprise";
 
   const emailDomain = email.split("@")[1] || "";
   const userProjects = isAdmin
@@ -633,5 +634,5 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ plan: users[0].plan || "starter", reports, agents: [], serverAgents, brevoStats, brevoCampaigns, gaStats, gaProjects, tokenUsage, tokenSummary });
+  return NextResponse.json({ plan: userPlan, reports, agents: [], serverAgents, brevoStats, brevoCampaigns, gaStats, gaProjects, tokenUsage, tokenSummary });
 }

@@ -17,6 +17,13 @@ interface UserQuota {
   unlimited: boolean;
 }
 
+interface EmbeddingUsage {
+  period: string;
+  requestCount: number;
+  tokenCount: number;
+  budget: number;
+}
+
 interface StatusData {
   allTime: { prompt_tokens: number; completion_tokens: number; total_tokens: number; request_count: number };
   today: { prompt_tokens: number; completion_tokens: number; total_tokens: number; request_count: number };
@@ -25,6 +32,7 @@ interface StatusData {
   users: number;
   nextResetUtc: string;
   user?: UserQuota;
+  embedding?: EmbeddingUsage;
 }
 
 function formatTokens(n: number): string {
@@ -211,6 +219,43 @@ export default function StatusPage() {
                 </table>
               </div>
             </div>
+            {/* Embedding Usage */}
+            {data.embedding && (
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <h2 className="text-sm font-semibold mb-4">{ts.embeddingUsage || "Embedding Usage"} <span className="text-xs font-normal text-gray-400">({data.embedding.period})</span></h2>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-xs text-gray-500 mb-1">
+                      <span>{formatTokens(data.embedding.requestCount)} {ts.requests}</span>
+                      <span>{formatTokens(data.embedding.budget)} {ts.limit || "limit"}</span>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          data.embedding.requestCount / data.embedding.budget > 0.9 ? "bg-red-500" :
+                          data.embedding.requestCount / data.embedding.budget > 0.7 ? "bg-yellow-500" : "bg-blue-500"
+                        }`}
+                        style={{ width: `${Math.min(100, (data.embedding.requestCount / data.embedding.budget) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <p className="text-lg font-bold">{formatTokens(data.embedding.requestCount)}</p>
+                      <p className="text-xs text-gray-500">{ts.requests}</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold">{formatTokens(data.embedding.tokenCount)}</p>
+                      <p className="text-xs text-gray-500">{ts.embeddingTokens || "Tokens Embedded"}</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold">{formatTokens(Math.max(0, data.embedding.budget - data.embedding.requestCount))}</p>
+                      <p className="text-xs text-gray-500">{ts.remaining}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-12 text-gray-400">{ts.unavailable}</div>

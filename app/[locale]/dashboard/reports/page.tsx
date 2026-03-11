@@ -2,14 +2,12 @@
 
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { getDictionary, type Locale } from "@/lib/i18n";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
-import UserPlanBadge from "@/components/UserPlanBadge";
+import DashboardShell from "@/components/DashboardShell";
 
 interface AgentReport {
   id: string;
@@ -362,12 +360,59 @@ function statusBadge(status: string | null, locale: string) {
   );
 }
 
+interface AuditLog {
+  id: number;
+  user_email: string;
+  action: string;
+  resource_type: string | null;
+  resource_id: number | null;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+const ACTION_LABELS: Record<string, Record<string, string>> = {
+  en: {
+    "login": "Login", "project.create": "Create Project", "project.update": "Update Project",
+    "project.delete": "Delete Project", "agent.activate": "Activate Agent", "agent.deactivate": "Deactivate Agent",
+    "agent.config_update": "Update Agent Config", "blocker.resolve": "Resolve Blocker",
+    "settings.update": "Update Settings", "execute.task": "Execute Task",
+    "subscribe.register": "Register Subscription", "org.create": "Create Organization",
+    "org.add_member": "Add Org Member", "org.remove_member": "Remove Org Member",
+    "org.assign_project": "Assign Project to Org", "org.update_role": "Update Member Role",
+    "org.rename": "Rename Organization", "org.join": "Join Organization", "org.delete": "Delete Organization",
+    "apikey.upsert": "Save API Key", "apikey.delete": "Delete API Key",
+  },
+  zh: {
+    "login": "登录", "project.create": "创建项目", "project.update": "更新项目",
+    "project.delete": "删除项目", "agent.activate": "激活智能体", "agent.deactivate": "停用智能体",
+    "agent.config_update": "更新智能体配置", "blocker.resolve": "解决阻碍",
+    "settings.update": "更新设置", "execute.task": "执行任务",
+    "subscribe.register": "注册订阅", "org.create": "创建组织",
+    "org.add_member": "添加组织成员", "org.remove_member": "移除组织成员",
+    "org.assign_project": "分配项目到组织", "org.update_role": "更新成员角色",
+    "org.rename": "重命名组织", "org.join": "加入组织", "org.delete": "删除组织",
+    "apikey.upsert": "保存 API 密钥", "apikey.delete": "删除 API 密钥",
+  },
+  "zh-TW": {
+    "login": "登入", "project.create": "建立專案", "project.update": "更新專案",
+    "project.delete": "刪除專案", "agent.activate": "啟用智能體", "agent.deactivate": "停用智能體",
+    "agent.config_update": "更新智能體設定", "blocker.resolve": "解決阻礙",
+    "settings.update": "更新設定", "execute.task": "執行任務",
+    "subscribe.register": "註冊訂閱", "org.create": "建立組織",
+    "org.add_member": "新增組織成員", "org.remove_member": "移除組織成員",
+    "org.assign_project": "分配專案至組織", "org.update_role": "更新成員角色",
+    "org.rename": "重新命名組織", "org.join": "加入組織", "org.delete": "刪除組織",
+    "apikey.upsert": "儲存 API 金鑰", "apikey.delete": "刪除 API 金鑰",
+  },
+};
+
 export default function ReportsPage() {
   const params = useParams();
   const locale = (params.locale as Locale) || "en";
   const dict = getDictionary(locale);
   const tr = dict.reportsPage;
   const tc = dict.common;
+  const ts = dict.settings;
 
   const { user, isLoading: userLoading } = useUser();
   const [reports, setReports] = useState<AgentReport[]>([]);
@@ -380,6 +425,8 @@ export default function ReportsPage() {
   const [tokenSummary, setTokenSummary] = useState({ totalTokens: 0, promptTokens: 0, completionTokens: 0 });
   const [userPlan, setUserPlan] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -400,6 +447,11 @@ export default function ReportsPage() {
         if (data.tokenSummary) setTokenSummary(data.tokenSummary);
       })
       .finally(() => setLoading(false));
+    setAuditLoading(true);
+    fetch("/api/audit-logs?limit=20")
+      .then((r) => r.json())
+      .then((data) => setAuditLogs(data.logs || []))
+      .finally(() => setAuditLoading(false));
   }, [user, locale]);
 
   const agentMetrics = reports.reduce(
@@ -434,7 +486,7 @@ export default function ReportsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{tr.title}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -450,32 +502,10 @@ export default function ReportsPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href={`/${locale}`} className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <img src="/logo.svg" alt="AutoClaw" className="w-9 h-9" />
-            <span><span className="text-red-600">Auto</span>Claw</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <LanguageSwitcher locale={locale} />
-            <span className="text-sm text-gray-600 hidden sm:flex items-center gap-1.5">{user.email} <UserPlanBadge plan={userPlan} /></span>
-            <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
+    <DashboardShell user={user} plan={userPlan}>
+      <div className="px-4 sm:px-6 py-6 w-full">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold">{tr.title}</h1>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
-            <Link href={`/${locale}/dashboard/chat`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
-            <Link href={`/${locale}/dashboard/agents`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.agents}</Link>
-            <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.reports}</span>
-            <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
-            <Link href={`/${locale}/dashboard/settings`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.settings}</Link>
-            <Link href={`/${locale}/dashboard/docs`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.docs}</Link>
-          </div>
         </div>
 
         {loading ? (
@@ -653,7 +683,7 @@ export default function ReportsPage() {
               </section>
             )}
 
-            <section>
+            <section className="mb-8">
               <h2 className="text-lg font-semibold mb-4">{tr.agentReports}</h2>
               {reports.length === 0 ? (
                 <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
@@ -690,9 +720,54 @@ export default function ReportsPage() {
                 </div>
               )}
             </section>
+
+            {/* Audit Log */}
+            <section>
+              <h2 className="text-lg font-semibold mb-4">{ts.auditLogTitle}</h2>
+              {auditLoading ? (
+                <p className="text-sm text-gray-400">{tc.loading}</p>
+              ) : auditLogs.length === 0 ? (
+                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                  <p className="text-gray-400 text-sm">{ts.auditLogEmpty}</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left px-4 py-3 font-medium text-gray-600 text-xs">{ts.auditAction}</th>
+                          <th className="text-left px-3 py-3 font-medium text-gray-600 text-xs">{ts.auditResource}</th>
+                          <th className="text-left px-3 py-3 font-medium text-gray-600 text-xs">{ts.auditUser}</th>
+                          <th className="text-right px-4 py-3 font-medium text-gray-600 text-xs">{ts.auditTime}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {auditLogs.map((log) => (
+                          <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="px-4 py-2.5 text-gray-700">
+                              {(ACTION_LABELS[locale] || ACTION_LABELS.en)[log.action] || log.action}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-500">
+                              {log.resource_type ? `${log.resource_type}${log.resource_id ? ` #${log.resource_id}` : ""}` : "-"}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-500 truncate max-w-40">{log.user_email}</td>
+                            <td className="px-4 py-2.5 text-right text-gray-400 whitespace-nowrap text-xs">
+                              {new Date(log.created_at).toLocaleString(locale === "zh" ? "zh-CN" : locale === "zh-TW" ? "zh-TW" : locale === "fr" ? "fr-FR" : "en-US", {
+                                month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                              })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </section>
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardShell>
   );
 }

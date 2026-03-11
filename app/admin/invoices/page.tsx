@@ -150,7 +150,7 @@ export default function AdminInvoicesPage() {
           <h1 className="text-2xl font-bold mb-4">Admin Access Required</h1>
           <a
             href="/auth/login"
-            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+            className="bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors"
           >
             Log In
           </a>
@@ -192,7 +192,7 @@ export default function AdminInvoicesPage() {
           <h1 className="text-2xl font-bold">Invoice Management</h1>
           <button
             onClick={() => setShowCreate(!showCreate)}
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+            className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
           >
             {showCreate ? "Cancel" : "Create Invoice"}
           </button>
@@ -327,7 +327,7 @@ export default function AdminInvoicesPage() {
               <button
                 type="submit"
                 disabled={creating}
-                className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                className="bg-red-800 hover:bg-red-900 disabled:opacity-50 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
               >
                 {creating ? "Creating..." : "Create Draft Invoice"}
               </button>

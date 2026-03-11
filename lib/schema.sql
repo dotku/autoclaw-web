@@ -119,3 +119,50 @@ CREATE INDEX IF NOT EXISTS idx_api_keys_hash ON api_keys(key_hash);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs(action);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at DESC);
+
+-- Knowledge Base (requires pgvector extension)
+-- Run once: CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS kb_documents (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  org_id INTEGER REFERENCES organizations(id) ON DELETE CASCADE,
+  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+  scope VARCHAR(20) NOT NULL DEFAULT 'personal', -- 'org', 'project', 'personal'
+  title VARCHAR(500) NOT NULL,
+  doc_type VARCHAR(20) NOT NULL, -- 'pdf', 'docx', 'image', 'url', 'text'
+  source_url TEXT, -- original URL or blob URL
+  file_size INTEGER DEFAULT 0,
+  chunk_count INTEGER DEFAULT 0,
+  status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'processing', 'ready', 'error'
+  error_message TEXT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS kb_chunks (
+  id SERIAL PRIMARY KEY,
+  document_id INTEGER REFERENCES kb_documents(id) ON DELETE CASCADE,
+  chunk_index INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  embedding vector(768), -- text-embedding-004 dimension
+  token_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_kb_documents_user ON kb_documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_kb_documents_org ON kb_documents(org_id);
+CREATE INDEX IF NOT EXISTS idx_kb_documents_project ON kb_documents(project_id);
+CREATE INDEX IF NOT EXISTS idx_kb_documents_scope ON kb_documents(scope);
+CREATE INDEX IF NOT EXISTS idx_kb_chunks_document ON kb_chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_kb_chunks_embedding ON kb_chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+
+-- Embedding usage tracking (monthly budget)
+CREATE TABLE IF NOT EXISTS embedding_usage (
+  id SERIAL PRIMARY KEY,
+  period VARCHAR(7) NOT NULL,           -- '2026-03' (monthly)
+  request_count INTEGER DEFAULT 0,
+  token_count INTEGER DEFAULT 0,
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(period)
+);

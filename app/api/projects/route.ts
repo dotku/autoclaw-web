@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
-import { getDb } from "@/lib/db";
+import { getDb, resolveUserPlan } from "@/lib/db";
 import { logAudit } from "@/lib/audit";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { sendWebhook } from "@/lib/webhook";
@@ -213,7 +213,7 @@ export async function GET(req: NextRequest) {
   }
 
   const userId = users[0].id;
-  const plan = (users[0].plan as string) || "starter";
+  const plan = await resolveUserPlan(sql, userId, (users[0].plan as string) || "starter", email);
   const role = (users[0].role as string) || "user";
   const agentLimit = PLAN_AGENT_LIMITS[plan] || 2;
   const isAdmin = role === "admin";
@@ -266,7 +266,7 @@ export async function POST(req: NextRequest) {
     users = await sql`INSERT INTO users (email, name, auth0_id) VALUES (${email}, ${(session.user.name as string) || ""}, ${session.user.sub as string}) RETURNING id, plan, role`;
   }
   const userId = users[0].id;
-  const plan = (users[0].plan as string) || "starter";
+  const plan = await resolveUserPlan(sql, userId, (users[0].plan as string) || "starter", email);
   const role = (users[0].role as string) || "user";
   const isAdmin = role === "admin";
   const agentLimit = isAdmin ? 999 : (PLAN_AGENT_LIMITS[plan] || 2);

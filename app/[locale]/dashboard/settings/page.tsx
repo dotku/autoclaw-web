@@ -5,8 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDictionary, type Locale } from "@/lib/i18n";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
-import UserPlanBadge from "@/components/UserPlanBadge";
+import DashboardShell from "@/components/DashboardShell";
 
 interface Project {
   id: number;
@@ -34,111 +33,6 @@ interface OrgMember {
   created_at: string;
 }
 
-interface AuditLog {
-  id: number;
-  user_email: string;
-  action: string;
-  resource_type: string | null;
-  resource_id: number | null;
-  details: Record<string, unknown>;
-  created_at: string;
-}
-
-const ACTION_LABELS: Record<string, Record<string, string>> = {
-  en: {
-    "login": "Login",
-    "project.create": "Create Project",
-    "project.update": "Update Project",
-    "project.delete": "Delete Project",
-    "agent.activate": "Activate Agent",
-    "agent.deactivate": "Deactivate Agent",
-    "agent.config_update": "Update Agent Config",
-    "blocker.resolve": "Resolve Blocker",
-    "settings.update": "Update Settings",
-    "execute.task": "Execute Task",
-    "subscribe.register": "Register Subscription",
-    "org.create": "Create Organization",
-    "org.add_member": "Add Org Member",
-    "org.remove_member": "Remove Org Member",
-    "org.assign_project": "Assign Project to Org",
-    "org.update_role": "Update Member Role",
-    "org.rename": "Rename Organization",
-    "org.join": "Join Organization",
-    "org.delete": "Delete Organization",
-    "apikey.upsert": "Save API Key",
-    "apikey.delete": "Delete API Key",
-  },
-  zh: {
-    "login": "登录",
-    "project.create": "创建项目",
-    "project.update": "更新项目",
-    "project.delete": "删除项目",
-    "agent.activate": "激活智能体",
-    "agent.deactivate": "停用智能体",
-    "agent.config_update": "更新智能体配置",
-    "blocker.resolve": "解决阻碍",
-    "settings.update": "更新设置",
-    "execute.task": "执行任务",
-    "subscribe.register": "注册订阅",
-    "org.create": "创建组织",
-    "org.add_member": "添加组织成员",
-    "org.remove_member": "移除组织成员",
-    "org.assign_project": "分配项目到组织",
-    "org.update_role": "更新成员角色",
-    "org.rename": "重命名组织",
-    "org.join": "加入组织",
-    "org.delete": "删除组织",
-    "apikey.upsert": "保存 API 密钥",
-    "apikey.delete": "删除 API 密钥",
-  },
-  "zh-TW": {
-    "login": "登入",
-    "project.create": "建立專案",
-    "project.update": "更新專案",
-    "project.delete": "刪除專案",
-    "agent.activate": "啟用智能體",
-    "agent.deactivate": "停用智能體",
-    "agent.config_update": "更新智能體設定",
-    "blocker.resolve": "解決阻礙",
-    "settings.update": "更新設定",
-    "execute.task": "執行任務",
-    "subscribe.register": "註冊訂閱",
-    "org.create": "建立組織",
-    "org.add_member": "新增組織成員",
-    "org.remove_member": "移除組織成員",
-    "org.assign_project": "分配專案至組織",
-    "org.update_role": "更新成員角色",
-    "org.rename": "重新命名組織",
-    "org.join": "加入組織",
-    "org.delete": "刪除組織",
-    "apikey.upsert": "儲存 API 金鑰",
-    "apikey.delete": "刪除 API 金鑰",
-  },
-  fr: {
-    "login": "Connexion",
-    "project.create": "Créer un projet",
-    "project.update": "Mettre à jour le projet",
-    "project.delete": "Supprimer le projet",
-    "agent.activate": "Activer l'agent",
-    "agent.deactivate": "Désactiver l'agent",
-    "agent.config_update": "Modifier la config agent",
-    "blocker.resolve": "Résoudre le blocage",
-    "settings.update": "Modifier les paramètres",
-    "execute.task": "Exécuter la tâche",
-    "subscribe.register": "Inscription abonnement",
-    "org.create": "Créer une organisation",
-    "org.add_member": "Ajouter un membre",
-    "org.remove_member": "Retirer un membre",
-    "org.assign_project": "Assigner un projet",
-    "org.update_role": "Modifier le rôle",
-    "org.rename": "Renommer l'organisation",
-    "org.join": "Rejoindre l'organisation",
-    "org.delete": "Supprimer l'organisation",
-    "apikey.upsert": "Enregistrer la clé API",
-    "apikey.delete": "Supprimer la clé API",
-  },
-};
-
 export default function SettingsPage() {
   const params = useParams();
   const locale = (params.locale as Locale) || "en";
@@ -154,13 +48,10 @@ export default function SettingsPage() {
   const [editForm, setEditForm] = useState({ name: "", website: "", ga_property_id: "", description: "", domain: "" });
   const [projectSaving, setProjectSaving] = useState(false);
   const [projectSaved, setProjectSaved] = useState<number | null>(null);
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [auditLoading, setAuditLoading] = useState(false);
-  const [teamMembers, setTeamMembers] = useState<{ email: string; name: string; project_role: string; created_at: string }[]>([]);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteProject, setInviteProject] = useState<number | null>(null);
-  const [inviting, setInviting] = useState(false);
-  const [inviteMsg, setInviteMsg] = useState("");
+  const [teamMembers, setTeamMembers] = useState<{ email: string; name: string; project_role: string; created_at: string; project_ids: number[] }[]>([]);
+  const [projectInviteEmail, setProjectInviteEmail] = useState<Record<number, string>>({});
+  const [projectInviting, setProjectInviting] = useState<Record<number, boolean>>({});
+  const [projectInviteMsg, setProjectInviteMsg] = useState<Record<number, string>>({});
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgMembers, setOrgMembers] = useState<Record<number, OrgMember[]>>({});
   const [newOrgName, setNewOrgName] = useState("");
@@ -183,17 +74,18 @@ export default function SettingsPage() {
   const [byokLabelInput, setByokLabelInput] = useState("");
   const [byokSaving, setByokSaving] = useState(false);
   const [byokMsg, setByokMsg] = useState("");
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
+    projects: true,
+    language: true,
+    org: true,
+    byok: true,
+  });
 
   useEffect(() => {
     if (!user) return;
     fetch(`/api/projects?_t=${Date.now()}`)
       .then((r) => r.json())
       .then((data) => { setProjects(data.projects || []); if (data.role) setUserRole(data.role); if (data.plan) setUserPlan(data.plan); });
-    setAuditLoading(true);
-    fetch("/api/audit-logs?limit=20")
-      .then((r) => r.json())
-      .then((data) => setAuditLogs(data.logs || []))
-      .finally(() => setAuditLoading(false));
     fetch("/api/team-members")
       .then((r) => r.json())
       .then((data) => setTeamMembers(data.members || []));
@@ -286,46 +178,61 @@ export default function SettingsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{tc.loading}</h1>
-          <a href="/auth/login" className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href="/auth/login" className="bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href={`/${locale}`} className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <img src="/logo.svg" alt="AutoClaw" className="w-9 h-9" />
-            <span><span className="text-red-600">Auto</span>Claw</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href={`/${locale}/dashboard`} className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.dashboard}</Link>
-            <LanguageSwitcher locale={locale} />
-            <span className="text-sm text-gray-600 hidden sm:flex items-center gap-1.5">{user.email} <UserPlanBadge /></span>
-            <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
-          </div>
-        </div>
-      </header>
+    <DashboardShell user={user}>
+      <div className="px-4 sm:px-6 py-6 w-full">
+        <h1 className="text-2xl font-bold mb-4">{ts.title}</h1>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-          <h1 className="text-2xl font-bold">{ts.title}</h1>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
-            <Link href={`/${locale}/dashboard/chat`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
-            <Link href={`/${locale}/dashboard/agents`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.agents}</Link>
-            <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
-            <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
-            <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.settings}</span>
-            <Link href={`/${locale}/dashboard/docs`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.docs}</Link>
-          </div>
+        {/* Settings Index Navigation */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+          {[
+            { key: "projects", icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z", label: ts.projectsTitle, count: projects.length },
+            { key: "language", icon: "M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129", label: ts.language },
+            { key: "org", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z", label: ts.orgTitle, count: orgs.length },
+            { key: "byok", icon: "M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z", label: ts.byokTitle, count: apiKeys.length },
+          ].map((item) => (
+            <button
+              key={item.key}
+              onClick={() => {
+                setCollapsed((prev) => ({ ...prev, [item.key]: !prev[item.key] }));
+                setTimeout(() => document.getElementById(`section-${item.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+              }}
+              className={`flex flex-col items-center gap-2 p-4 rounded-lg border transition-all cursor-pointer ${
+                !collapsed[item.key] ? "border-red-300 bg-red-50 shadow-sm" : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
+              }`}
+            >
+              <svg className={`w-6 h-6 ${!collapsed[item.key] ? "text-red-600" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+              </svg>
+              <span className={`text-xs font-medium ${!collapsed[item.key] ? "text-red-700" : "text-gray-600"}`}>{item.label}</span>
+              {item.count !== undefined && (
+                <span className="text-[10px] text-gray-400">{item.count}</span>
+              )}
+            </button>
+          ))}
         </div>
 
         {/* Project Management */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-1">{ts.projectsTitle}</h2>
-          <p className="text-sm text-gray-500 mb-4">{ts.projectsDesc}</p>
+        <div id="section-projects" className="bg-white rounded-lg border border-gray-200 mb-6 overflow-hidden">
+          <button
+            onClick={() => setCollapsed((prev) => ({ ...prev, projects: !prev.projects }))}
+            className="w-full flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+          >
+            <div className="text-left">
+              <h2 className="text-lg font-semibold">{ts.projectsTitle}</h2>
+              <p className="text-sm text-gray-500">{ts.projectsDesc}</p>
+            </div>
+            <svg className={`w-5 h-5 text-gray-400 transition-transform ${collapsed.projects ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {!collapsed.projects && <div className="px-6 pb-6 border-t border-gray-100 pt-4">
 
           {projects.length === 0 ? (
             <p className="text-sm text-gray-400">{ts.noProjects}</p>
@@ -353,7 +260,7 @@ export default function SettingsPage() {
                           <button
                             onClick={() => saveProject(project.id)}
                             disabled={projectSaving}
-                            className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                            className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
                           >
                             {projectSaving ? "..." : tc.save}
                           </button>
@@ -439,16 +346,155 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Project Team Members */}
+                  {(() => {
+                    const projectMembers = teamMembers.filter((m) => m.project_ids?.includes(project.id));
+                    const isOwner = projectMembers.some((m) => m.email === user?.email && m.project_role === "owner");
+                    const canManage = isOwner || userRole === "admin";
+                    return (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <h4 className="text-xs font-semibold text-gray-500 mb-2">{ts.teamTitle || "Team Members"}</h4>
+                        {projectMembers.length > 0 && (
+                          <div className="overflow-x-auto mb-2">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="border-b border-gray-200 text-left">
+                                  <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamEmail || "Email"}</th>
+                                  <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamName || "Name"}</th>
+                                  <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamRole || "Role"}</th>
+                                  <th className="pb-2 font-medium text-gray-500 text-xs"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {projectMembers.map((member) => {
+                                  const memberIsOwner = member.project_role === "owner";
+                                  const isSelf = member.email === user?.email;
+                                  const roleColors: Record<string, string> = {
+                                    owner: "bg-red-100 text-red-800",
+                                    admin: "bg-purple-100 text-purple-800",
+                                    operator: "bg-blue-100 text-blue-700",
+                                    viewer: "bg-gray-100 text-gray-600",
+                                    member: "bg-gray-100 text-gray-600",
+                                    domain: "bg-green-100 text-green-700",
+                                  };
+                                  const canEdit = canManage && !memberIsOwner && !isSelf;
+                                  return (
+                                    <tr key={member.email} className="border-b border-gray-100">
+                                      <td className="py-2 pr-4 text-gray-700">{member.email}</td>
+                                      <td className="py-2 pr-4 text-gray-500">{member.name || "-"}</td>
+                                      <td className="py-2 pr-4">
+                                        {canEdit ? (
+                                          <select
+                                            value={member.project_role}
+                                            onChange={async (e) => {
+                                              const newRole = e.target.value;
+                                              await fetch("/api/team-members", {
+                                                method: "PUT",
+                                                headers: { "Content-Type": "application/json" },
+                                                body: JSON.stringify({ project_id: project.id, member_email: member.email, role: newRole }),
+                                              });
+                                              setTeamMembers((prev) => prev.map((m) => m.email === member.email ? { ...m, project_role: newRole } : m));
+                                            }}
+                                            className="text-xs font-medium px-2 py-1 rounded border border-gray-200 outline-none cursor-pointer"
+                                          >
+                                            <option value="admin">Admin</option>
+                                            <option value="operator">Operator</option>
+                                            <option value="viewer">Viewer</option>
+                                          </select>
+                                        ) : (
+                                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleColors[member.project_role] || "bg-gray-100 text-gray-600"}`}>
+                                            {member.project_role}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-2">
+                                        {canEdit && (
+                                          <button
+                                            onClick={async () => {
+                                              if (!confirm(`Remove ${member.email}?`)) return;
+                                              await fetch(`/api/team-members?project_id=${project.id}&member_email=${encodeURIComponent(member.email)}`, { method: "DELETE" });
+                                              setTeamMembers((prev) => prev.filter((m) => m.email !== member.email));
+                                            }}
+                                            className="text-xs text-red-500 hover:text-red-700 transition-colors cursor-pointer"
+                                          >
+                                            {tc.remove}
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                        {canManage && (
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <input
+                              type="email"
+                              value={projectInviteEmail[project.id] || ""}
+                              onChange={(e) => setProjectInviteEmail((prev) => ({ ...prev, [project.id]: e.target.value }))}
+                              placeholder={ts.invitePlaceholder || "colleague@company.com"}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                            />
+                            <button
+                              onClick={async () => {
+                                const email = projectInviteEmail[project.id];
+                                if (!email) return;
+                                setProjectInviting((prev) => ({ ...prev, [project.id]: true }));
+                                try {
+                                  const res = await fetch("/api/team-members", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ email, project_id: project.id }),
+                                  });
+                                  const data = await res.json();
+                                  if (res.ok) {
+                                    setProjectInviteMsg((prev) => ({ ...prev, [project.id]: ts.inviteSuccess || "Added!" }));
+                                    setProjectInviteEmail((prev) => ({ ...prev, [project.id]: "" }));
+                                    fetch("/api/team-members").then((r) => r.json()).then((d) => setTeamMembers(d.members || []));
+                                  } else {
+                                    setProjectInviteMsg((prev) => ({ ...prev, [project.id]: data.error || "Failed" }));
+                                  }
+                                } finally {
+                                  setProjectInviting((prev) => ({ ...prev, [project.id]: false }));
+                                  setTimeout(() => setProjectInviteMsg((prev) => ({ ...prev, [project.id]: "" })), 3000);
+                                }
+                              }}
+                              disabled={projectInviting[project.id] || !projectInviteEmail[project.id]}
+                              className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {projectInviting[project.id] ? "..." : (ts.inviteBtn || "Invite")}
+                            </button>
+                          </div>
+                        )}
+                        {projectInviteMsg[project.id] && <p className="text-sm text-green-600 mt-1">{projectInviteMsg[project.id]}</p>}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
             </div>
           )}
+        </div>}
         </div>
 
         {/* Language Settings */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-1">{ts.language}</h2>
-          <p className="text-sm text-gray-500 mb-4">{ts.languageDesc}</p>
+        <div id="section-language" className="bg-white rounded-lg border border-gray-200 mb-6 overflow-hidden">
+          <button
+            onClick={() => setCollapsed((prev) => ({ ...prev, language: !prev.language }))}
+            className="w-full flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+          >
+            <div className="text-left">
+              <h2 className="text-lg font-semibold">{ts.language}</h2>
+              <p className="text-sm text-gray-500">{ts.languageDesc}</p>
+            </div>
+            <svg className={`w-5 h-5 text-gray-400 transition-transform ${collapsed.language ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {!collapsed.language && <div className="px-6 pb-6 border-t border-gray-100 pt-4">
 
           <div className="space-y-2 mb-6">
             <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
@@ -500,23 +546,35 @@ export default function SettingsPage() {
           <div className="flex items-center gap-3">
             <button
               onClick={handleSave}
-              className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+              className="bg-red-800 hover:bg-red-900 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
             >
               {tc.save}
             </button>
             {saved && <span className="text-sm text-green-600">{ts.saved}</span>}
           </div>
+        </div>}
         </div>
 
         {/* Team & Organization */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-1">{ts.orgTitle}</h2>
-          <p className="text-sm text-gray-500 mb-4">{ts.orgDesc}</p>
+        <div id="section-org" className="bg-white rounded-lg border border-gray-200 mb-6 overflow-hidden">
+          <button
+            onClick={() => setCollapsed((prev) => ({ ...prev, org: !prev.org }))}
+            className="w-full flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+          >
+            <div className="text-left">
+              <h2 className="text-lg font-semibold">{ts.orgTitle}</h2>
+              <p className="text-sm text-gray-500">{ts.orgDesc}</p>
+            </div>
+            <svg className={`w-5 h-5 text-gray-400 transition-transform ${collapsed.org ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {!collapsed.org && <div className="px-6 pb-6 border-t border-gray-100 pt-4">
 
           {userPlan === "starter" ? (
             <div className="text-center py-6 border border-dashed border-gray-200 rounded-lg bg-gray-50">
               <p className="text-sm text-gray-500 mb-3">{ts.orgUpgradeHint}</p>
-              <Link href={`/${locale}/dashboard/billing`} className="inline-block bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+              <Link href={`/${locale}/dashboard/billing`} className="inline-block bg-red-800 hover:bg-red-900 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
                 {ts.orgUpgradeBtn}
               </Link>
             </div>
@@ -567,7 +625,7 @@ export default function SettingsPage() {
                     }
                   }}
                   disabled={orgCreating || !newOrgName}
-                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                  className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                 >
                   {orgCreating ? "..." : ts.orgCreate}
                 </button>
@@ -765,50 +823,87 @@ export default function SettingsPage() {
                           }
                         }}
                         disabled={addingMember || !addMemberEmail || addMemberOrgId !== org.id}
-                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                        className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                       >
                         {addingMember ? "..." : ts.orgAddMember}
                       </button>
                     </div>
                   )}
 
-                  {/* Assign Project to Org (only for org admins) */}
-                  {org.member_role === "admin" && projects.filter((p) => !p.org_id).length > 0 && (
-                    <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                      <select
-                        value={assignOrgId === org.id ? (assignProjectId ?? "") : ""}
-                        onChange={(e) => { setAssignProjectId(e.target.value ? Number(e.target.value) : null); setAssignOrgId(org.id); }}
-                        onFocus={() => setAssignOrgId(org.id)}
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
-                      >
-                        <option value="">{ts.orgAssignProject}</option>
-                        {projects.filter((p) => !p.org_id).map((p) => (
-                          <option key={p.id} value={p.id}>{p.name}</option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={async () => {
-                          if (!assignProjectId || assignOrgId !== org.id) return;
-                          const res = await fetch("/api/organizations", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ action: "assign_project", org_id: org.id, project_id: assignProjectId }),
-                          });
-                          if (res.ok) {
-                            setOrgMsg(ts.orgProjectAssigned);
-                            setAssignProjectId(null);
-                            setProjects((prev) => prev.map((p) => p.id === assignProjectId ? { ...p, org_id: org.id } : p));
-                            fetch("/api/organizations").then((r) => r.json()).then((d) => setOrgs(d.orgs || []));
-                            setTimeout(() => setOrgMsg(""), 3000);
-                          }
-                        }}
-                        disabled={!assignProjectId || assignOrgId !== org.id}
-                        className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                      >
-                        {ts.orgAssignProject}
-                      </button>
-                    </div>
-                  )}
+                  {/* Assigned Projects */}
+                  {(() => {
+                    const orgProjects = projects.filter((p) => p.org_id === org.id);
+                    return (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <h4 className="text-xs font-semibold text-gray-500 mb-2">{ts.orgProjects || "Projects"} ({orgProjects.length})</h4>
+                        {orgProjects.length > 0 && (
+                          <div className="space-y-1 mb-2">
+                            {orgProjects.map((p) => (
+                              <div key={p.id} className="flex items-center justify-between py-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm text-gray-700">{p.name}</span>
+                                  {p.website && <span className="text-xs text-gray-400 truncate max-w-[200px]">{p.website}</span>}
+                                </div>
+                                {org.member_role === "admin" && (
+                                  <button
+                                    onClick={async () => {
+                                      await fetch("/api/projects", {
+                                        method: "POST",
+                                        headers: { "Content-Type": "application/json" },
+                                        body: JSON.stringify({ action: "update_project", project_id: p.id, org_id: null }),
+                                      });
+                                      setProjects((prev) => prev.map((proj) => proj.id === p.id ? { ...proj, org_id: null } : proj));
+                                      fetch("/api/organizations").then((r) => r.json()).then((d) => setOrgs(d.orgs || []));
+                                    }}
+                                    className="text-xs text-red-400 hover:text-red-600 cursor-pointer"
+                                  >
+                                    {ts.orgUnassign || "Unassign"}
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {/* Assign Project to Org (only for org admins) */}
+                        {org.member_role === "admin" && projects.filter((p) => !p.org_id).length > 0 && (
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <select
+                              value={assignOrgId === org.id ? (assignProjectId ?? "") : ""}
+                              onChange={(e) => { setAssignProjectId(e.target.value ? Number(e.target.value) : null); setAssignOrgId(org.id); }}
+                              onFocus={() => setAssignOrgId(org.id)}
+                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                            >
+                              <option value="">{ts.orgAssignProject}</option>
+                              {projects.filter((p) => !p.org_id).map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                            <button
+                              onClick={async () => {
+                                if (!assignProjectId || assignOrgId !== org.id) return;
+                                const res = await fetch("/api/organizations", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "assign_project", org_id: org.id, project_id: assignProjectId }),
+                                });
+                                if (res.ok) {
+                                  setOrgMsg(ts.orgProjectAssigned);
+                                  setAssignProjectId(null);
+                                  setProjects((prev) => prev.map((p) => p.id === assignProjectId ? { ...p, org_id: org.id } : p));
+                                  fetch("/api/organizations").then((r) => r.json()).then((d) => setOrgs(d.orgs || []));
+                                  setTimeout(() => setOrgMsg(""), 3000);
+                                }
+                              }}
+                              disabled={!assignProjectId || assignOrgId !== org.id}
+                              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                            >
+                              {ts.orgAssignProject}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               ))}
               {orgMsg && <p className="text-sm text-green-600">{orgMsg}</p>}
@@ -859,7 +954,7 @@ export default function SettingsPage() {
                       }
                     }}
                     disabled={orgCreating || !newOrgName}
-                    className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
+                    className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                   >
                     {orgCreating ? "..." : ts.orgCreate}
                   </button>
@@ -868,149 +963,24 @@ export default function SettingsPage() {
             </div>
           )}
 
-          {/* Project Collaborators — invite by project */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">{ts.teamTitle}</h3>
-            <p className="text-xs text-gray-400 mb-3">{ts.teamDesc}</p>
-            <div className="flex flex-col sm:flex-row gap-2 mb-4">
-              <input
-                type="email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder={ts.invitePlaceholder || "colleague@company.com"}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
-              />
-              <select
-                value={inviteProject ?? ""}
-                onChange={(e) => setInviteProject(e.target.value ? Number(e.target.value) : null)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
-              >
-                <option value="">{ts.inviteSelectProject || "Select project"}</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <button
-                onClick={async () => {
-                  if (!inviteEmail || !inviteProject) return;
-                  setInviting(true);
-                  setInviteMsg("");
-                  try {
-                    const res = await fetch("/api/team-members", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ email: inviteEmail, project_id: inviteProject }),
-                    });
-                    const data = await res.json();
-                    if (res.ok) {
-                      setInviteMsg(ts.inviteSuccess || "Invitation sent!");
-                      setInviteEmail("");
-                      fetch("/api/team-members").then((r) => r.json()).then((d) => setTeamMembers(d.members || []));
-                    } else {
-                      setInviteMsg(data.error || "Failed");
-                    }
-                  } finally {
-                    setInviting(false);
-                    setTimeout(() => setInviteMsg(""), 3000);
-                  }
-                }}
-                disabled={inviting || !inviteEmail || !inviteProject}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-              >
-                {inviting ? "..." : (ts.inviteBtn || "Invite")}
-              </button>
-            </div>
-            {inviteMsg && <p className="text-sm text-green-600 mb-3">{inviteMsg}</p>}
-
-            {teamMembers.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left">
-                      <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamEmail || "Email"}</th>
-                      <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamName || "Name"}</th>
-                      <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamRole || "Role"}</th>
-                      <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamJoined || "Joined"}</th>
-                      <th className="pb-2 font-medium text-gray-500 text-xs"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {teamMembers.map((member) => {
-                      const isOwner = member.project_role === "owner";
-                      const isSelf = member.email === user?.email;
-                      const roleColors: Record<string, string> = {
-                        owner: "bg-red-100 text-red-800",
-                        admin: "bg-purple-100 text-purple-800",
-                        operator: "bg-blue-100 text-blue-700",
-                        viewer: "bg-gray-100 text-gray-600",
-                        member: "bg-gray-100 text-gray-600",
-                        domain: "bg-green-100 text-green-700",
-                      };
-                      // Current user can manage if they are an owner
-                      const currentUserIsOwner = teamMembers.some((m) => m.email === user?.email && m.project_role === "owner");
-                      const canManage = (currentUserIsOwner || userRole === "admin") && !isOwner && !isSelf;
-                      return (
-                        <tr key={member.email} className="border-b border-gray-100">
-                          <td className="py-2 pr-4 text-gray-700">{member.email}</td>
-                          <td className="py-2 pr-4 text-gray-500">{member.name || "-"}</td>
-                          <td className="py-2 pr-4">
-                            {canManage ? (
-                              <select
-                                value={member.project_role}
-                                onChange={async (e) => {
-                                  const newRole = e.target.value;
-                                  await fetch("/api/team-members", {
-                                    method: "PUT",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ project_id: projects[0]?.id, member_email: member.email, role: newRole }),
-                                  });
-                                  setTeamMembers((prev) => prev.map((m) => m.email === member.email ? { ...m, project_role: newRole } : m));
-                                }}
-                                className="text-xs font-medium px-2 py-1 rounded border border-gray-200 outline-none cursor-pointer"
-                              >
-                                <option value="admin">Admin</option>
-                                <option value="operator">Operator</option>
-                                <option value="viewer">Viewer</option>
-                              </select>
-                            ) : (
-                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleColors[member.project_role] || "bg-gray-100 text-gray-600"}`}>
-                                {member.project_role}
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-2 pr-4 text-gray-400 whitespace-nowrap">
-                            {new Date(member.created_at).toLocaleDateString(locale === "zh" ? "zh-CN" : locale === "zh-TW" ? "zh-TW" : locale === "fr" ? "fr-FR" : "en-US", {
-                              year: "numeric", month: "short", day: "numeric",
-                            })}
-                          </td>
-                          <td className="py-2">
-                            {canManage && (
-                              <button
-                                onClick={async () => {
-                                  if (!confirm(`Remove ${member.email}?`)) return;
-                                  await fetch(`/api/team-members?project_id=${projects[0]?.id}&member_email=${encodeURIComponent(member.email)}`, { method: "DELETE" });
-                                  setTeamMembers((prev) => prev.filter((m) => m.email !== member.email));
-                                }}
-                                className="text-xs text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-                              >
-                                {tc.remove}
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+        </div>}
         </div>
 
         {/* API Keys (BYOK) */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-1">{ts.byokTitle}</h2>
-          <p className="text-sm text-gray-500 mb-4">{ts.byokDesc}</p>
+        <div id="section-byok" className="bg-white rounded-lg border border-gray-200 mb-6 overflow-hidden">
+          <button
+            onClick={() => setCollapsed((prev) => ({ ...prev, byok: !prev.byok }))}
+            className="w-full flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50 transition-colors"
+          >
+            <div className="text-left">
+              <h2 className="text-lg font-semibold">{ts.byokTitle}</h2>
+              <p className="text-sm text-gray-500">{ts.byokDesc}</p>
+            </div>
+            <svg className={`w-5 h-5 text-gray-400 transition-transform ${collapsed.byok ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {!collapsed.byok && <div className="px-6 pb-6 border-t border-gray-100 pt-4">
 
           <div className="space-y-3">
             {([
@@ -1092,7 +1062,7 @@ export default function SettingsPage() {
                             }
                           }}
                           disabled={byokSaving || !byokKeyInput}
-                          className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                          className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
                         >
                           {byokSaving ? "..." : ts.byokSave}
                         </button>
@@ -1224,7 +1194,7 @@ export default function SettingsPage() {
                             }
                           }}
                           disabled={byokSaving}
-                          className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                          className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
                         >
                           {byokSaving ? "..." : ts.byokSave}
                         </button>
@@ -1263,51 +1233,10 @@ export default function SettingsPage() {
             })()}
           </div>
           {byokMsg && <p className="text-sm text-green-600 mt-3">{byokMsg}</p>}
+        </div>}
         </div>
 
-        {/* Audit Log */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-lg font-semibold mb-1">{ts.auditLogTitle}</h2>
-          <p className="text-sm text-gray-500 mb-4">{ts.auditLogDesc}</p>
-
-          {auditLoading ? (
-            <p className="text-sm text-gray-400">{tc.loading}</p>
-          ) : auditLogs.length === 0 ? (
-            <p className="text-sm text-gray-400">{ts.auditLogEmpty}</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200 text-left">
-                    <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.auditAction}</th>
-                    <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.auditResource}</th>
-                    <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.auditUser}</th>
-                    <th className="pb-2 font-medium text-gray-500 text-xs">{ts.auditTime}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {auditLogs.map((log) => (
-                    <tr key={log.id} className="border-b border-gray-100">
-                      <td className="py-2 pr-4 text-gray-700">
-                        {(ACTION_LABELS[locale] || ACTION_LABELS.en)[log.action] || log.action}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-500">
-                        {log.resource_type ? `${log.resource_type}${log.resource_id ? ` #${log.resource_id}` : ""}` : "-"}
-                      </td>
-                      <td className="py-2 pr-4 text-gray-500 truncate max-w-40">{log.user_email}</td>
-                      <td className="py-2 text-gray-400 whitespace-nowrap">
-                        {new Date(log.created_at).toLocaleString(locale === "zh" ? "zh-CN" : locale === "zh-TW" ? "zh-TW" : locale === "fr" ? "fr-FR" : "en-US", {
-                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                        })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </main>
-    </div>
+      </div>
+    </DashboardShell>
   );
 }

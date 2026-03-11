@@ -33,6 +33,21 @@ export async function GET(req: NextRequest) {
   const isAdmin = users[0].role === "admin";
   const userId = users[0].id;
 
+  // Auto-join: if user's email domain matches an org's domain, add them as member automatically
+  if (!isAdmin) {
+    const emailDomain = email.split("@")[1] || "";
+    if (emailDomain) {
+      const domainOrgs = await sql`
+        SELECT o.id FROM organizations o
+        WHERE o.domain IS NOT NULL AND o.domain != '' AND o.domain = ${emailDomain}
+          AND o.id NOT IN (SELECT org_id FROM organization_members WHERE user_id = ${userId})
+      `;
+      for (const org of domainOrgs) {
+        await sql`INSERT INTO organization_members (org_id, user_id, role) VALUES (${org.id}, ${userId}, 'member')`;
+      }
+    }
+  }
+
   const orgs = isAdmin
     ? await sql`
         SELECT o.*, om.role as member_role,

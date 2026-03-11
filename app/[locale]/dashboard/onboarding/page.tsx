@@ -156,7 +156,7 @@ export default function OnboardingPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{t.welcomeTitle}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/onboarding`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/onboarding`} className="bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -261,7 +261,7 @@ export default function OnboardingPage() {
                   <button
                     type="submit"
                     disabled={creating || !orgName.trim() || nameStatus === "taken" || nameStatus === "checking"}
-                    className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                    className="w-full bg-red-800 hover:bg-red-900 disabled:bg-gray-300 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
                   >
                     {creating ? t.creating : t.createOrgBtn}
                   </button>
@@ -282,7 +282,7 @@ export default function OnboardingPage() {
                   <button
                     type="submit"
                     disabled={joining || !joinName.trim()}
-                    className="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                    className="w-full bg-red-800 hover:bg-red-900 disabled:bg-gray-300 text-white px-4 py-2.5 rounded-lg text-sm font-medium transition-colors cursor-pointer"
                   >
                     {joining ? t.joining : t.joinOrgBtn}
                   </button>

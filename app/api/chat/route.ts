@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
-import { getDb } from "@/lib/db";
+import { getDb, resolveUserPlan } from "@/lib/db";
 import { chatWithAI, ByokKeys } from "@/lib/ai";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { prospectDomain, prospectMultipleDomains } from "@/lib/leads";
+import { searchKnowledgeBase, buildRagContext } from "@/lib/rag";
 
 export const dynamic = "force-dynamic";
 
@@ -212,7 +213,7 @@ export async function POST(req: NextRequest) {
     users = await sql`INSERT INTO users (email, name, auth0_id) VALUES (${email}, ${(session.user.name as string) || ""}, ${session.user.sub as string}) RETURNING id, plan`;
   }
   const userId = users[0].id;
-  const userPlan = (users[0].plan as string) || "starter";
+  const userPlan = await resolveUserPlan(sql, userId, (users[0].plan as string) || "starter", email);
   const agentLimit = getAgentLimit(userPlan);
 
   // Fetch user BYOK AI keys
@@ -712,6 +713,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // RAG: search knowledge base for relevant context
+    let ragContext = "";
+    try {
+      const orgRows = await sql`SELECT org_id FROM organization_members WHERE user_id = ${userId} LIMIT 1`;
+      const userOrgId = orgRows.length > 0 ? (orgRows[0].org_id as number) : undefined;
+      const ragResults = await searchKnowledgeBase(sql, message, {
+        userId,
+        orgId: userOrgId,
+        projectId: project_id ? parseInt(project_id) : undefined,
+        topK: 3,
+        byokKeys: byok,
+      });
+      ragContext = buildRagContext(ragResults);
+    } catch {
+      // RAG unavailable (no embeddings or no pgvector), skip silently
+    }
+
     const systemPrompt = `You are AutoClaw, an AI marketing automation assistant. You help users manage their marketing projects and agents. Respond in the same language the user uses (Chinese if they write in Chinese, English if English).
 
 Current user context:
@@ -736,7 +754,7 @@ For actionable requests, guide the user to use specific commands. For example:
 - "my website is https://example.com" to configure agents and resolve blockers
 - "rename [old] to [new]"
 
-${projects.length === 0 ? "The user has no projects yet. Help them create one by asking about their business, or answer their question directly." : ""}
+${ragContext ? ragContext + "\nUse the knowledge base context above to inform your answers when relevant.\n" : ""}${projects.length === 0 ? "The user has no projects yet. Help them create one by asking about their business, or answer their question directly." : ""}
 Keep responses concise and helpful. Use markdown formatting.`;
 
     try {

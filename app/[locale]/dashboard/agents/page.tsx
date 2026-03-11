@@ -2,11 +2,9 @@
 
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDictionary, type Locale } from "@/lib/i18n";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
-import UserPlanBadge from "@/components/UserPlanBadge";
+import DashboardShell from "@/components/DashboardShell";
 
 interface AgentAssignment {
   id: number;
@@ -190,41 +188,16 @@ export default function AgentsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{ta.signInAgents}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white border-b border-gray-200">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <Link href={`/${locale}`} className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <img src="/logo.svg" alt="AutoClaw" className="w-9 h-9" />
-            <span><span className="text-red-600">Auto</span>Claw</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href={`/${locale}/dashboard`} className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.dashboard}</Link>
-            <LanguageSwitcher locale={locale} />
-            <span className="text-sm text-gray-600 hidden sm:flex items-center gap-1.5">{user.email} <UserPlanBadge plan={planInfo.plan} /></span>
-            <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 flex-1 w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-          <h1 className="text-2xl font-bold">{ta.title}</h1>
-          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
-            <Link href={`/${locale}/dashboard/chat`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
-            <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.agents}</span>
-            <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
-            <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
-            <Link href={`/${locale}/dashboard/settings`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.settings}</Link>
-            <Link href={`/${locale}/dashboard/docs`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.docs}</Link>
-          </div>
-        </div>
+    <DashboardShell user={user} plan={planInfo.plan}>
+      <div className="px-4 sm:px-6 py-6 w-full">
+        <h1 className="text-2xl font-bold mb-6">{ta.title}</h1>
 
         {loading ? (
           <p className="text-gray-500">{ta.loadingAgents}</p>
@@ -234,7 +207,7 @@ export default function AgentsPage() {
               <div className="text-sm text-gray-500">
                 <span className="font-medium text-gray-700 capitalize">{planInfo.plan}</span> {ta.plan} — {planInfo.totalAgents}/{planInfo.agentLimit === 999 ? ta.unlimited : planInfo.agentLimit} {ta.agentsUsed}
               </div>
-              <button onClick={() => setShowCreateProject(true)} className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+              <button onClick={() => setShowCreateProject(true)} className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
                 {ta.newProject}
               </button>
             </div>
@@ -247,7 +220,7 @@ export default function AgentsPage() {
                   <input type="text" placeholder={ta.websiteUrl} value={newProject.website} onChange={(e) => setNewProject({ ...newProject, website: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" />
                   <textarea placeholder={ta.briefDesc} value={newProject.description} onChange={(e) => setNewProject({ ...newProject, description: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none" rows={2} />
                   <div className="flex gap-2">
-                    <button type="submit" disabled={actionLoading || !newProject.name.trim()} className="bg-red-600 hover:bg-red-700 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">{tc.create}</button>
+                    <button type="submit" disabled={actionLoading || !newProject.name.trim()} className="bg-red-800 hover:bg-red-900 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">{tc.create}</button>
                     <button type="button" onClick={() => setShowCreateProject(false)} className="text-gray-500 hover:text-gray-700 px-4 py-2 text-sm cursor-pointer">{tc.cancel}</button>
                   </div>
                 </div>
@@ -448,7 +421,7 @@ export default function AgentsPage() {
 
           </>
         )}
-      </main>
-    </div>
+      </div>
+    </DashboardShell>
   );
 }
