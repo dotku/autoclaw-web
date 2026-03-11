@@ -230,7 +230,7 @@ export default function ChatPage() {
                 {msg.role === "assistant" && (
                   <div className="w-7 h-7 rounded-full bg-red-100 flex items-center justify-center shrink-0 mt-1 text-sm">🦞</div>
                 )}
-                <div className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${msg.role === "user" ? "bg-red-600 text-white" : "bg-gray-50 text-gray-800 border border-gray-200"}`}>
+                <div className={`max-w-[80%] rounded-lg px-4 py-3 text-sm ${msg.role === "user" ? "bg-red-800 text-white" : "bg-gray-50 text-gray-800 border border-gray-200"}`}>
                   <div className={`prose prose-sm max-w-none [&>p]:my-1 [&>ul]:my-1 [&>ol]:my-1 [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-sm [&_table]:text-xs [&_table]:border-collapse [&_th]:border [&_th]:px-2 [&_th]:py-1 [&_td]:border [&_td]:px-2 [&_td]:py-1 ${msg.role === "user" ? "prose-invert [&_th]:border-red-300 [&_td]:border-red-200 [&_th]:bg-red-400/30 [&_a]:text-red-100" : "prose-gray [&_th]:border-gray-300 [&_th]:bg-gray-50 [&_td]:border-gray-200"}`}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>{msg.content}</ReactMarkdown>
                   </div>

@@ -90,7 +90,7 @@ export default function ChatWidget() {
       {open && (
         <div className="fixed bottom-6 right-6 z-50 w-[360px] max-w-[calc(100vw-2rem)] h-[500px] max-h-[calc(100vh-6rem)] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col overflow-hidden">
           {/* Header */}
-          <div className="px-4 py-3 bg-red-700 text-white flex items-center justify-between shrink-0">
+          <div className="px-4 py-3 bg-red-800 text-white flex items-center justify-between shrink-0">
             <span className="font-semibold text-sm">{tc.chat}</span>
             <button onClick={() => setOpen(false)} className="text-white/80 hover:text-white cursor-pointer">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,7 +112,7 @@ export default function ChatWidget() {
                 <div
                   className={`max-w-[75%] px-3 py-2 rounded-lg text-sm ${
                     msg.role === "user"
-                      ? "bg-red-600 text-white"
+                      ? "bg-red-800 text-white"
                       : "bg-gray-50 text-gray-800 border border-gray-200"
                   }`}
                 >

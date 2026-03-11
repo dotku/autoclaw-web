@@ -95,7 +95,7 @@ export async function GET() {
         const userToday = await sql`
           SELECT provider, SUM(prompt_tokens)::bigint as prompt_tokens, SUM(completion_tokens)::bigint as completion_tokens, SUM(total_tokens)::bigint as total_tokens, COUNT(*)::int as request_count
           FROM token_usage
-          WHERE user_id = ${userId} AND source = 'chat' AND created_at::date = CURRENT_DATE
+          WHERE user_id = ${userId} AND created_at::date = CURRENT_DATE
           GROUP BY provider
         `;
 

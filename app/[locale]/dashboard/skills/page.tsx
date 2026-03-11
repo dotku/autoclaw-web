@@ -116,7 +116,7 @@ export default function SkillsPage() {
               onClick={() => setActiveCategory(cat.key)}
               className={`px-4 py-2 rounded-full text-sm font-medium transition-colors whitespace-nowrap cursor-pointer ${
                 activeCategory === cat.key
-                  ? "bg-red-700 text-white"
+                  ? "bg-red-800 text-white"
                   : "bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-800"
               }`}
             >

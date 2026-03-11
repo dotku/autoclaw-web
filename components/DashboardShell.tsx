@@ -28,6 +28,7 @@ export default function DashboardShell({ children, user, plan, fullHeight }: Pro
     { href: `/${locale}/dashboard/agents`, label: tc.agents },
     { href: `/${locale}/dashboard/skills`, label: tc.skills },
     { href: `/${locale}/dashboard/knowledge`, label: tc.knowledge },
+    { href: `/${locale}/dashboard/workflows`, label: tc.workflows },
     { href: `/${locale}/dashboard/reports`, label: tc.reports },
     { href: `/${locale}/dashboard/billing`, label: tc.billing },
     { href: `/${locale}/dashboard/settings`, label: tc.settings },
