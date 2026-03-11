@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import UserPlanBadge from "@/components/UserPlanBadge";
 
 interface Invoice {
   id: string;
@@ -129,6 +130,7 @@ export default function BillingPage() {
   const dict = getDictionary(locale);
   const td = dict.dashboard;
   const tc = dict.common;
+  const tl = dict.landing;
 
   const { user, isLoading: userLoading } = useUser();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -138,19 +140,23 @@ export default function BillingPage() {
   const [tokenSummary, setTokenSummary] = useState<TokenSummary | null>(null);
   const [tokenByModel, setTokenByModel] = useState<TokenByModel[]>([]);
   const [tokenByDate, setTokenByDate] = useState<TokenByDate[]>([]);
+  const [upgrading, setUpgrading] = useState<string | null>(null);
+  const [apiKeys, setApiKeys] = useState<{ service: string; masked_key: string }[]>([]);
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
     const fetchBilling = fetch("/api/invoices").then((r) => r.json()).catch(() => ({}));
     const fetchTokens = fetch("/api/token-usage").then((r) => r.json()).catch(() => ({}));
-    Promise.all([fetchBilling, fetchTokens])
-      .then(([billingData, tokenData]) => {
+    const fetchKeys = fetch("/api/api-keys").then((r) => r.json()).catch(() => ({}));
+    Promise.all([fetchBilling, fetchTokens, fetchKeys])
+      .then(([billingData, tokenData, keyData]) => {
         setInvoices(billingData.invoices || []);
         setSubscriptions(billingData.subscriptions || []);
         if (billingData.userPlan) setUserPlan(billingData.userPlan);
         setTokenSummary(tokenData.summary || null);
         setTokenByModel(tokenData.byModel || []);
+        setApiKeys(keyData.keys || []);
         setTokenByDate(tokenData.byDate || []);
       })
       .finally(() => setLoading(false));
@@ -169,7 +175,7 @@ export default function BillingPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{td.signInDashboard}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -185,7 +191,7 @@ export default function BillingPage() {
           </Link>
           <div className="flex items-center gap-4">
             <LanguageSwitcher locale={locale} />
-            <span className="text-sm text-gray-600 hidden sm:inline">{user.email}</span>
+            <span className="text-sm text-gray-600 hidden sm:flex items-center gap-1.5">{user.email} <UserPlanBadge /></span>
             <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
           </div>
         </div>
@@ -195,7 +201,7 @@ export default function BillingPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold">{tc.billing}</h1>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
-            <Link href={`/${locale}/dashboard`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
+            <Link href={`/${locale}/dashboard/chat`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
             <Link href={`/${locale}/dashboard/agents`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.agents}</Link>
             <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
             <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.billing}</span>
@@ -208,6 +214,198 @@ export default function BillingPage() {
           <p className="text-gray-500">{tc.loading}</p>
         ) : (
           <>
+            {/* Current Plan & Available Plans */}
+            {(() => {
+              const plans = [
+                {
+                  key: "starter",
+                  name: tl.planStarter,
+                  price: tl.planStarterPrice,
+                  desc: tl.planStarterDesc,
+                  features: [tl.feat2Agents, tl.feat100Emails, tl.feat1Project, tl.featFreeModels, tl.featBYOK],
+                  color: "border-gray-300",
+                  badge: "bg-gray-200 text-gray-700",
+                  cta: null,
+                },
+                {
+                  key: "growth",
+                  name: tl.planGrowth,
+                  price: tl.planGrowthPrice,
+                  desc: tl.planGrowthDesc,
+                  features: [tl.feat10Agents, tl.feat2000Emails, tl.feat5Projects],
+                  color: "border-emerald-400",
+                  badge: "bg-emerald-100 text-emerald-700",
+                  cta: "growth",
+                },
+                {
+                  key: "scale",
+                  name: tl.planScale,
+                  price: tl.planScalePrice,
+                  desc: tl.planScaleDesc,
+                  features: [tl.featUnlimitedAgents, tl.feat10000Emails, tl.featUnlimitedProjects, tl.featCustomAgent],
+                  color: "border-purple-400",
+                  badge: "bg-purple-100 text-purple-700",
+                  cta: "scale",
+                },
+                {
+                  key: "enterprise",
+                  name: tl.planEnterprise,
+                  price: tl.planEnterprisePrice,
+                  desc: tl.planEnterpriseDesc,
+                  features: [tl.featUnlimitedAgents, tl.featUnlimitedProjects, tl.featDedicated, tl.featDedicatedInfra, tl.featCustomTraining],
+                  color: "border-amber-400",
+                  badge: "bg-amber-100 text-amber-700",
+                  cta: "enterprise",
+                },
+              ];
+              const currentPlan = plans.find((p) => p.key === userPlan) || plans[0];
+              const otherPlans = plans.filter((p) => p.key !== userPlan);
+
+              return (
+                <>
+                  {/* Current Plan */}
+                  <section className="mb-8">
+                    <h2 className="text-lg font-semibold mb-4">{td.yourCurrentPlan}</h2>
+                    <div className={`bg-white rounded-lg border-2 ${currentPlan.color} p-6`}>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-xl font-bold">{currentPlan.name}</h3>
+                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${currentPlan.badge}`}>{td.currentPlanBadge}</span>
+                          </div>
+                          <p className="text-sm text-gray-500">{currentPlan.desc}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-2xl font-bold">{currentPlan.price}{currentPlan.key !== "starter" && currentPlan.key !== "enterprise" ? td.billingCycleMonthly : ""}</p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {currentPlan.features.map((feat, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 text-xs bg-gray-50 text-gray-600 px-2.5 py-1 rounded-full">
+                            <svg className="w-3.5 h-3.5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                            {feat}
+                          </span>
+                        ))}
+                      </div>
+                      {/* Token usage summary inline */}
+                      {tokenSummary && Number(tokenSummary.total_tokens) > 0 && (
+                        <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <div>
+                            <p className="text-xs text-gray-400">{td.totalTokens}</p>
+                            <p className="text-sm font-semibold">{formatNumber(Number(tokenSummary.total_tokens))}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">{td.promptTokens}</p>
+                            <p className="text-sm font-semibold">{formatNumber(Number(tokenSummary.prompt_tokens))}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">{td.completionTokens}</p>
+                            <p className="text-sm font-semibold">{formatNumber(Number(tokenSummary.completion_tokens))}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-400">{td.requests}</p>
+                            <p className="text-sm font-semibold">{formatNumber(Number(tokenSummary.request_count))}</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+
+                  {/* Available Plans */}
+                  <section className="mb-8">
+                    <h2 className="text-lg font-semibold mb-4">{td.availablePlans}</h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {otherPlans.map((plan) => {
+                        const planOrder = ["starter", "growth", "scale", "enterprise"];
+                        const isUpgrade = planOrder.indexOf(plan.key) > planOrder.indexOf(userPlan);
+                        return (
+                          <div key={plan.key} className={`bg-white rounded-lg border ${plan.color} p-5 flex flex-col`}>
+                            <div className="mb-3">
+                              <h3 className="font-semibold text-lg">{plan.name}</h3>
+                              <p className="text-xl font-bold mt-1">{plan.price}{plan.key !== "starter" && plan.key !== "enterprise" ? td.billingCycleMonthly : ""}</p>
+                              <p className="text-xs text-gray-500 mt-1">{plan.desc}</p>
+                            </div>
+                            <ul className="space-y-1.5 mb-4 flex-1">
+                              {plan.features.map((feat, i) => (
+                                <li key={i} className="flex items-start gap-1.5 text-xs text-gray-600">
+                                  <svg className="w-3.5 h-3.5 text-green-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                  {feat}
+                                </li>
+                              ))}
+                            </ul>
+                            {isUpgrade && plan.key !== "enterprise" && (
+                              <button
+                                onClick={async () => {
+                                  setUpgrading(plan.key);
+                                  try {
+                                    const res = await fetch("/api/checkout", {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ plan: plan.key }),
+                                    });
+                                    const data = await res.json();
+                                    if (data.url) window.location.href = data.url;
+                                  } finally {
+                                    setUpgrading(null);
+                                  }
+                                }}
+                                disabled={upgrading === plan.key}
+                                className="w-full bg-red-600 hover:bg-red-700 text-white py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {upgrading === plan.key ? "..." : td.upgradeTo}
+                              </button>
+                            )}
+                            {isUpgrade && plan.key === "enterprise" && (
+                              <a
+                                href={`mailto:support@autoclaw.ai?subject=Enterprise Plan Inquiry`}
+                                className="w-full block text-center bg-gray-900 hover:bg-gray-800 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                              >
+                                {td.contactSales}
+                              </a>
+                            )}
+                            {!isUpgrade && (
+                              <p className="text-xs text-center text-gray-400 py-2">{plan.name}</p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                </>
+              );
+            })()}
+
+            {/* BYOK Section */}
+            <section className="mb-8">
+              <h2 className="text-lg font-semibold mb-4">{td.byokSectionTitle}</h2>
+              <div className="bg-white rounded-lg border border-gray-200 p-6">
+                <p className="text-sm text-gray-500 mb-4">{td.byokSectionDesc}</p>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+                  {([
+                    { service: "openai", name: "OpenAI" },
+                    { service: "anthropic", name: "Anthropic" },
+                    { service: "google", name: "Google Gemini" },
+                    { service: "vercel", name: "Vercel AI Gateway" },
+                    { service: "clawhub", name: "ClawHub" },
+                    { service: "twitter", name: "X (Twitter)", multi: ["twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret"] },
+                  ]).map((svc) => {
+                    const configured = svc.multi ? svc.multi.every((s: string) => apiKeys.some((k) => k.service === s)) : apiKeys.some((k) => k.service === svc.service);
+                    return (
+                      <div key={svc.service} className={`rounded-lg border p-3 ${configured ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"}`}>
+                        <p className="text-sm font-medium">{svc.name}</p>
+                        <p className={`text-xs mt-1 ${configured ? "text-green-600" : "text-gray-400"}`}>
+                          {configured ? `✓ ${td.byokConfigured}` : "—"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+                <Link href={`/${locale}/dashboard/settings`} className="text-sm text-red-600 hover:text-red-700 font-medium">
+                  {td.byokManageKeys} →
+                </Link>
+              </div>
+            </section>
+
             {/* Token Usage Section */}
             <section className="mb-8">
               <h2 className="text-lg font-semibold mb-4">{td.tokenUsage}</h2>

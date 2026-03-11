@@ -89,6 +89,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
+    // Check for duplicate org name
+    const existing = await sql`SELECT id FROM organizations WHERE name = ${name}`;
+    if (existing.length > 0) {
+      return NextResponse.json({ error: "Organization name already taken" }, { status: 409 });
+    }
+
     const org = await sql`
       INSERT INTO organizations (name, domain, created_by)
       VALUES (${name}, ${domain || null}, ${userId})
@@ -181,7 +187,7 @@ export async function POST(req: NextRequest) {
     const emailDomain = email.split("@")[1] || "";
     const proj = isAdmin
       ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
-      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
 
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
@@ -300,6 +306,43 @@ export async function POST(req: NextRequest) {
     `;
 
     return NextResponse.json({ members });
+  }
+
+  if (action === "check_name") {
+    const { name } = body as { action: string; name?: string };
+    if (!name) {
+      return NextResponse.json({ available: false });
+    }
+    const existing = await sql`SELECT id FROM organizations WHERE name = ${name}`;
+    return NextResponse.json({ available: existing.length === 0 });
+  }
+
+  if (action === "join") {
+    const { name } = body as { action: string; name?: string };
+    if (!name) {
+      return NextResponse.json({ error: "Organization name required" }, { status: 400 });
+    }
+
+    const org = await sql`SELECT id FROM organizations WHERE name = ${name}`;
+    if (org.length === 0) {
+      return NextResponse.json({ error: "Organization not found" }, { status: 404 });
+    }
+
+    const orgId = org[0].id as number;
+
+    // Check if already a member
+    const existing = await sql`SELECT id FROM organization_members WHERE org_id = ${orgId} AND user_id = ${userId}`;
+    if (existing.length > 0) {
+      return NextResponse.json({ error: "Already a member" }, { status: 409 });
+    }
+
+    await sql`
+      INSERT INTO organization_members (org_id, user_id, role)
+      VALUES (${orgId}, ${userId}, 'member')
+    `;
+
+    logAudit({ userId, userEmail: email, action: "org.join", resourceType: "organization", resourceId: orgId, details: { name }, ipAddress: ip });
+    return NextResponse.json({ message: "Joined organization" });
   }
 
   return NextResponse.json({ error: "Unknown action" }, { status: 400 });

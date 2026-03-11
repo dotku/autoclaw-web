@@ -18,6 +18,7 @@ export type AuditAction =
   | "org.assign_project"
   | "org.rename"
   | "org.update_role"
+  | "org.join"
   | "org.delete"
   | "apikey.upsert"
   | "apikey.delete"

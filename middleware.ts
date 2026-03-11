@@ -10,9 +10,13 @@ export async function middleware(request: NextRequest) {
     return auth0.middleware(request);
   }
 
-  // Skip locale redirect for API routes, static files, etc.
+  // API routes - run auth0 middleware for session support
+  if (pathname.startsWith("/api/")) {
+    return auth0.middleware(request);
+  }
+
+  // Skip locale redirect for static files, etc.
   if (
-    pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon.ico") ||
     pathname.startsWith("/sitemap.xml") ||

@@ -49,6 +49,7 @@ export const updateAgentConfigSchema = z.object({
 export const updateProjectSchema = z.object({
   action: z.literal("update_project"),
   project_id: id,
+  name: z.string().min(1).max(255).optional(),
   website: url,
   ga_property_id: z.string().max(20).optional().nullable(),
   description: longText,
@@ -114,6 +115,21 @@ export const deleteOrgSchema = z.object({
   org_id: id,
 });
 
+export const checkOrgNameSchema = z.object({
+  action: z.literal("check_name"),
+  name: shortText,
+});
+
+export const joinOrgSchema = z.object({
+  action: z.literal("join"),
+  name: shortText,
+});
+
+export const getMembersSchema = z.object({
+  action: z.literal("get_members"),
+  org_id: id,
+});
+
 export const orgActionSchema = z.discriminatedUnion("action", [
   createOrgSchema,
   addMemberSchema,
@@ -122,6 +138,9 @@ export const orgActionSchema = z.discriminatedUnion("action", [
   updateMemberRoleSchema,
   renameOrgSchema,
   deleteOrgSchema,
+  checkOrgNameSchema,
+  joinOrgSchema,
+  getMembersSchema,
 ]);
 
 // ── Team Members ──
@@ -131,7 +150,7 @@ export const inviteTeamMemberSchema = z.object({
 });
 
 // ── API Keys (BYOK) ──
-const allowedService = z.enum(["brevo", "apollo", "hunter", "openai"]);
+const allowedService = z.enum(["brevo", "apollo", "hunter", "openai", "anthropic", "google", "vercel", "clawhub", "twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret"]);
 
 export const upsertApiKeySchema = z.object({
   action: z.literal("upsert"),

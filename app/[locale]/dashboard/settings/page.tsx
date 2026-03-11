@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import UserPlanBadge from "@/components/UserPlanBadge";
 
 interface Project {
   id: number;
@@ -62,6 +63,7 @@ const ACTION_LABELS: Record<string, Record<string, string>> = {
     "org.assign_project": "Assign Project to Org",
     "org.update_role": "Update Member Role",
     "org.rename": "Rename Organization",
+    "org.join": "Join Organization",
     "org.delete": "Delete Organization",
     "apikey.upsert": "Save API Key",
     "apikey.delete": "Delete API Key",
@@ -84,6 +86,7 @@ const ACTION_LABELS: Record<string, Record<string, string>> = {
     "org.assign_project": "分配项目到组织",
     "org.update_role": "更新成员角色",
     "org.rename": "重命名组织",
+    "org.join": "加入组织",
     "org.delete": "删除组织",
     "apikey.upsert": "保存 API 密钥",
     "apikey.delete": "删除 API 密钥",
@@ -106,6 +109,7 @@ const ACTION_LABELS: Record<string, Record<string, string>> = {
     "org.assign_project": "分配專案至組織",
     "org.update_role": "更新成員角色",
     "org.rename": "重新命名組織",
+    "org.join": "加入組織",
     "org.delete": "刪除組織",
     "apikey.upsert": "儲存 API 金鑰",
     "apikey.delete": "刪除 API 金鑰",
@@ -128,6 +132,7 @@ const ACTION_LABELS: Record<string, Record<string, string>> = {
     "org.assign_project": "Assigner un projet",
     "org.update_role": "Modifier le rôle",
     "org.rename": "Renommer l'organisation",
+    "org.join": "Rejoindre l'organisation",
     "org.delete": "Supprimer l'organisation",
     "apikey.upsert": "Enregistrer la clé API",
     "apikey.delete": "Supprimer la clé API",
@@ -146,12 +151,12 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState({ website: "", ga_property_id: "", description: "", domain: "" });
+  const [editForm, setEditForm] = useState({ name: "", website: "", ga_property_id: "", description: "", domain: "" });
   const [projectSaving, setProjectSaving] = useState(false);
   const [projectSaved, setProjectSaved] = useState<number | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
-  const [teamMembers, setTeamMembers] = useState<{ email: string; name: string; role: string; created_at: string }[]>([]);
+  const [teamMembers, setTeamMembers] = useState<{ email: string; name: string; project_role: string; created_at: string }[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteProject, setInviteProject] = useState<number | null>(null);
   const [inviting, setInviting] = useState(false);
@@ -162,6 +167,7 @@ export default function SettingsPage() {
   const [newOrgDomain, setNewOrgDomain] = useState("");
   const [orgCreating, setOrgCreating] = useState(false);
   const [orgMsg, setOrgMsg] = useState("");
+  const [orgMsgType, setOrgMsgType] = useState<"success" | "error">("success");
   const [addMemberEmail, setAddMemberEmail] = useState("");
   const [addMemberOrgId, setAddMemberOrgId] = useState<number | null>(null);
   const [addingMember, setAddingMember] = useState(false);
@@ -170,6 +176,7 @@ export default function SettingsPage() {
   const [renamingOrgId, setRenamingOrgId] = useState<number | null>(null);
   const [renameOrgName, setRenameOrgName] = useState("");
   const [userRole, setUserRole] = useState<string>("user");
+  const [userPlan, setUserPlan] = useState<string>("starter");
   const [apiKeys, setApiKeys] = useState<{ id: number; service: string; masked_key: string; label: string | null; updated_at: string }[]>([]);
   const [byokEditing, setByokEditing] = useState<string | null>(null);
   const [byokKeyInput, setByokKeyInput] = useState("");
@@ -179,9 +186,9 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!user) return;
-    fetch("/api/projects")
+    fetch(`/api/projects?_t=${Date.now()}`)
       .then((r) => r.json())
-      .then((data) => { setProjects(data.projects || []); if (data.role) setUserRole(data.role); });
+      .then((data) => { setProjects(data.projects || []); if (data.role) setUserRole(data.role); if (data.plan) setUserPlan(data.plan); });
     setAuditLoading(true);
     fetch("/api/audit-logs?limit=20")
       .then((r) => r.json())
@@ -224,6 +231,7 @@ export default function SettingsPage() {
   function startEdit(project: Project) {
     setEditingId(project.id);
     setEditForm({
+      name: project.name || "",
       website: project.website || "",
       ga_property_id: project.ga_property_id || "",
       description: project.description || "",
@@ -241,6 +249,7 @@ export default function SettingsPage() {
         body: JSON.stringify({
           action: "update_project",
           project_id: projectId,
+          name: editForm.name || undefined,
           website: editForm.website,
           ga_property_id: editForm.ga_property_id || null,
           description: editForm.description,
@@ -251,7 +260,7 @@ export default function SettingsPage() {
         setProjects((prev) =>
           prev.map((p) =>
             p.id === projectId
-              ? { ...p, website: editForm.website, ga_property_id: editForm.ga_property_id || null, description: editForm.description, domain: editForm.domain || null }
+              ? { ...p, name: editForm.name || p.name, website: editForm.website, ga_property_id: editForm.ga_property_id || null, description: editForm.description, domain: editForm.domain || null }
               : p
           )
         );
@@ -294,7 +303,7 @@ export default function SettingsPage() {
           <div className="flex items-center gap-4">
             <Link href={`/${locale}/dashboard`} className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.dashboard}</Link>
             <LanguageSwitcher locale={locale} />
-            <span className="text-sm text-gray-600 hidden sm:inline">{user.email}</span>
+            <span className="text-sm text-gray-600 hidden sm:flex items-center gap-1.5">{user.email} <UserPlanBadge /></span>
             <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
           </div>
         </div>
@@ -304,7 +313,7 @@ export default function SettingsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold">{ts.title}</h1>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
-            <Link href={`/${locale}/dashboard`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
+            <Link href={`/${locale}/dashboard/chat`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
             <Link href={`/${locale}/dashboard/agents`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.agents}</Link>
             <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
             <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
@@ -325,7 +334,16 @@ export default function SettingsPage() {
               {projects.map((project) => (
                 <div key={project.id} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-sm">{project.name}</h3>
+                    {editingId === project.id ? (
+                      <input
+                        type="text"
+                        value={editForm.name}
+                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                        className="font-semibold text-sm px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
+                      />
+                    ) : (
+                      <h3 className="font-semibold text-sm">{project.name}</h3>
+                    )}
                     <div className="flex items-center gap-2">
                       {projectSaved === project.id && (
                         <span className="text-xs text-green-600">{ts.saved}</span>
@@ -495,7 +513,14 @@ export default function SettingsPage() {
           <h2 className="text-lg font-semibold mb-1">{ts.orgTitle}</h2>
           <p className="text-sm text-gray-500 mb-4">{ts.orgDesc}</p>
 
-          {orgs.length === 0 ? (
+          {userPlan === "starter" ? (
+            <div className="text-center py-6 border border-dashed border-gray-200 rounded-lg bg-gray-50">
+              <p className="text-sm text-gray-500 mb-3">{ts.orgUpgradeHint}</p>
+              <Link href={`/${locale}/dashboard/billing`} className="inline-block bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+                {ts.orgUpgradeBtn}
+              </Link>
+            </div>
+          ) : orgs.length === 0 ? (
             <>
               <p className="text-sm text-gray-400 mb-4">{ts.orgNoOrg}</p>
               <div className="flex flex-col sm:flex-row gap-2">
@@ -525,11 +550,16 @@ export default function SettingsPage() {
                       });
                       if (res.ok) {
                         setOrgMsg(ts.orgCreated);
+                        setOrgMsgType("success");
                         setNewOrgName("");
                         setNewOrgDomain("");
                         const data = await fetch("/api/organizations").then((r) => r.json());
                         setOrgs(data.orgs || []);
                         (data.orgs || []).forEach((org: Org) => loadOrgMembers(org.id));
+                      } else {
+                        const err = await res.json();
+                        setOrgMsg(err.error || "Failed");
+                        setOrgMsgType("error");
                       }
                     } finally {
                       setOrgCreating(false);
@@ -542,7 +572,7 @@ export default function SettingsPage() {
                   {orgCreating ? "..." : ts.orgCreate}
                 </button>
               </div>
-              {orgMsg && <p className="text-sm text-green-600 mt-2">{orgMsg}</p>}
+              {orgMsg && <p className={`text-sm mt-2 ${orgMsgType === "error" ? "text-red-500" : "text-green-600"}`}>{orgMsg}</p>}
             </>
           ) : (
             <div className="space-y-4">
@@ -620,7 +650,7 @@ export default function SettingsPage() {
                               setOrgMsg(ts.orgDeleted || "Organization deleted");
                               const data = await fetch("/api/organizations").then((r) => r.json());
                               setOrgs(data.orgs || []);
-                              fetch("/api/projects").then((r) => r.json()).then((d) => setProjects(d.projects || []));
+                              fetch(`/api/projects?_t=${Date.now()}`).then((r) => r.json()).then((d) => setProjects(d.projects || []));
                               setTimeout(() => setOrgMsg(""), 3000);
                             } else {
                               const data = await res.json();
@@ -812,11 +842,16 @@ export default function SettingsPage() {
                         });
                         if (res.ok) {
                           setOrgMsg(ts.orgCreated);
+                          setOrgMsgType("success");
                           setNewOrgName("");
                           setNewOrgDomain("");
                           const data = await fetch("/api/organizations").then((r) => r.json());
                           setOrgs(data.orgs || []);
                           (data.orgs || []).forEach((o: Org) => loadOrgMembers(o.id));
+                        } else {
+                          const err = await res.json();
+                          setOrgMsg(err.error || "Failed");
+                          setOrgMsgType("error");
                         }
                       } finally {
                         setOrgCreating(false);
@@ -895,78 +930,80 @@ export default function SettingsPage() {
                       <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamEmail || "Email"}</th>
                       <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamName || "Name"}</th>
                       <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamRole || "Role"}</th>
-                      <th className="pb-2 font-medium text-gray-500 text-xs">{ts.teamJoined || "Joined"}</th>
+                      <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamJoined || "Joined"}</th>
+                      <th className="pb-2 font-medium text-gray-500 text-xs"></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {teamMembers.map((member) => (
-                      <tr key={member.email} className="border-b border-gray-100">
-                        <td className="py-2 pr-4 text-gray-700">{member.email}</td>
-                        <td className="py-2 pr-4 text-gray-500">{member.name || "-"}</td>
-                        <td className="py-2 pr-4">
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${member.role === "admin" ? "bg-purple-100 text-purple-800" : "bg-gray-100 text-gray-600"}`}>
-                            {member.role || "user"}
-                          </span>
-                        </td>
-                        <td className="py-2 text-gray-400 whitespace-nowrap">
-                          {new Date(member.created_at).toLocaleDateString(locale === "zh" ? "zh-CN" : locale === "zh-TW" ? "zh-TW" : locale === "fr" ? "fr-FR" : "en-US", {
-                            year: "numeric", month: "short", day: "numeric",
-                          })}
-                        </td>
-                      </tr>
-                    ))}
+                    {teamMembers.map((member) => {
+                      const isOwner = member.project_role === "owner";
+                      const isSelf = member.email === user?.email;
+                      const roleColors: Record<string, string> = {
+                        owner: "bg-red-100 text-red-800",
+                        admin: "bg-purple-100 text-purple-800",
+                        operator: "bg-blue-100 text-blue-700",
+                        viewer: "bg-gray-100 text-gray-600",
+                        member: "bg-gray-100 text-gray-600",
+                        domain: "bg-green-100 text-green-700",
+                      };
+                      // Current user can manage if they are an owner
+                      const currentUserIsOwner = teamMembers.some((m) => m.email === user?.email && m.project_role === "owner");
+                      const canManage = (currentUserIsOwner || userRole === "admin") && !isOwner && !isSelf;
+                      return (
+                        <tr key={member.email} className="border-b border-gray-100">
+                          <td className="py-2 pr-4 text-gray-700">{member.email}</td>
+                          <td className="py-2 pr-4 text-gray-500">{member.name || "-"}</td>
+                          <td className="py-2 pr-4">
+                            {canManage ? (
+                              <select
+                                value={member.project_role}
+                                onChange={async (e) => {
+                                  const newRole = e.target.value;
+                                  await fetch("/api/team-members", {
+                                    method: "PUT",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ project_id: projects[0]?.id, member_email: member.email, role: newRole }),
+                                  });
+                                  setTeamMembers((prev) => prev.map((m) => m.email === member.email ? { ...m, project_role: newRole } : m));
+                                }}
+                                className="text-xs font-medium px-2 py-1 rounded border border-gray-200 outline-none cursor-pointer"
+                              >
+                                <option value="admin">Admin</option>
+                                <option value="operator">Operator</option>
+                                <option value="viewer">Viewer</option>
+                              </select>
+                            ) : (
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleColors[member.project_role] || "bg-gray-100 text-gray-600"}`}>
+                                {member.project_role}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-gray-400 whitespace-nowrap">
+                            {new Date(member.created_at).toLocaleDateString(locale === "zh" ? "zh-CN" : locale === "zh-TW" ? "zh-TW" : locale === "fr" ? "fr-FR" : "en-US", {
+                              year: "numeric", month: "short", day: "numeric",
+                            })}
+                          </td>
+                          <td className="py-2">
+                            {canManage && (
+                              <button
+                                onClick={async () => {
+                                  if (!confirm(`Remove ${member.email}?`)) return;
+                                  await fetch(`/api/team-members?project_id=${projects[0]?.id}&member_email=${encodeURIComponent(member.email)}`, { method: "DELETE" });
+                                  setTeamMembers((prev) => prev.filter((m) => m.email !== member.email));
+                                }}
+                                className="text-xs text-red-500 hover:text-red-700 transition-colors cursor-pointer"
+                              >
+                                {tc.remove}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Security & Compliance */}
-        <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-          <h2 className="text-lg font-semibold mb-1">{ts.securityTitle}</h2>
-          <p className="text-sm text-gray-500 mb-4">{ts.securityDesc}</p>
-
-          {/* Data Practices */}
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">{ts.dataPracticesTitle}</h3>
-            <div className="space-y-2">
-              {[ts.dataEncryption, ts.dataAuth, ts.dataRetention, ts.dataBackup, ts.dataAccess, ts.dataRateLimit, ts.dataLoginAudit].filter(Boolean).map((item, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <svg className="w-4 h-4 text-green-500 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                  <span className="text-sm text-gray-600">{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Compliance Status */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">{ts.complianceTitle}</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <span className="text-sm text-gray-700">{ts.complianceSoc2}</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-yellow-100 text-yellow-800">{ts.complianceSoc2Status}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <span className="text-sm text-gray-700">{ts.complianceHttps}</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-800">{ts.complianceHttpsStatus}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <span className="text-sm text-gray-700">{ts.complianceHeaders}</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-800">{ts.complianceHeadersStatus}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <span className="text-sm text-gray-700">{ts.complianceAudit}</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-800">{ts.complianceAuditStatus}</span>
-              </div>
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <span className="text-sm text-gray-700">{ts.complianceRateLimit}</span>
-                <span className="text-xs font-medium px-2 py-1 rounded-full bg-green-100 text-green-800">{ts.complianceRateLimitStatus}</span>
-              </div>
-            </div>
           </div>
         </div>
 
@@ -977,10 +1014,11 @@ export default function SettingsPage() {
 
           <div className="space-y-3">
             {([
-              { service: "brevo", name: ts.byokBravo, hint: ts.byokBrevoHint },
-              { service: "apollo", name: ts.byokApollo, hint: ts.byokApolloHint },
-              { service: "hunter", name: ts.byokHunter, hint: ts.byokHunterHint },
               { service: "openai", name: ts.byokOpenai, hint: ts.byokOpenaiHint },
+              { service: "anthropic", name: ts.byokAnthropic, hint: ts.byokAnthropicHint },
+              { service: "google", name: ts.byokGoogle, hint: ts.byokGoogleHint },
+              { service: "vercel", name: ts.byokVercel, hint: ts.byokVercelHint },
+              { service: "clawhub", name: ts.byokClawhub, hint: ts.byokClawhubHint },
             ] as const).map((svc) => {
               const existing = apiKeys.find((k) => k.service === svc.service);
               const isEditing = byokEditing === svc.service;
@@ -1089,6 +1127,140 @@ export default function SettingsPage() {
                 </div>
               );
             })}
+
+            {/* X (Twitter) - 4 keys grouped */}
+            {(() => {
+              const twitterKeys = [
+                { service: "twitter_api_key" as const, name: ts.byokTwitterApiKey },
+                { service: "twitter_api_secret" as const, name: ts.byokTwitterApiSecret },
+                { service: "twitter_access_token" as const, name: ts.byokTwitterAccessToken },
+                { service: "twitter_access_token_secret" as const, name: ts.byokTwitterAccessTokenSecret },
+              ];
+              const twitterConfigured = twitterKeys.filter((k) => apiKeys.some((a) => a.service === k.service));
+              const isEditingTwitter = byokEditing === "twitter";
+
+              return (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">{ts.byokTwitter}</h3>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${twitterConfigured.length === 4 ? "bg-green-100 text-green-800" : twitterConfigured.length > 0 ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-500"}`}>
+                        {twitterConfigured.length === 4 ? ts.byokMasked : twitterConfigured.length > 0 ? `${twitterConfigured.length}/4` : ts.byokNotSet}
+                      </span>
+                    </div>
+                    {!isEditingTwitter && (
+                      <button
+                        onClick={() => {
+                          setByokEditing("twitter");
+                          setByokKeyInput("");
+                        }}
+                        className="text-xs text-red-600 hover:text-red-800 transition-colors cursor-pointer"
+                      >
+                        {twitterConfigured.length > 0 ? ts.edit : ts.byokSave}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mb-2">{ts.byokTwitterHint}</p>
+
+                  {!isEditingTwitter && twitterConfigured.length > 0 && (
+                    <div className="space-y-1">
+                      {twitterKeys.map((tk) => {
+                        const existing = apiKeys.find((a) => a.service === tk.service);
+                        return existing ? (
+                          <div key={tk.service} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 w-36">{tk.name}:</span>
+                            <span className="text-sm text-gray-600 font-mono">{existing.masked_key}</span>
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+
+                  {isEditingTwitter && (
+                    <div className="space-y-2 mt-2">
+                      {twitterKeys.map((tk) => {
+                        const existing = apiKeys.find((a) => a.service === tk.service);
+                        return (
+                          <div key={tk.service}>
+                            <label className="text-xs text-gray-500 mb-1 block">{tk.name}</label>
+                            <input
+                              type="password"
+                              defaultValue=""
+                              placeholder={existing ? "••••••••  (leave blank to keep)" : ts.byokPlaceholder}
+                              data-twitter-key={tk.service}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none font-mono"
+                            />
+                          </div>
+                        );
+                      })}
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={async () => {
+                            setByokSaving(true);
+                            try {
+                              const inputs = document.querySelectorAll<HTMLInputElement>("[data-twitter-key]");
+                              let saved = false;
+                              for (const input of inputs) {
+                                const service = input.getAttribute("data-twitter-key");
+                                const value = input.value.trim();
+                                if (value && service) {
+                                  const res = await fetch("/api/api-keys", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ action: "upsert", service, api_key: value }),
+                                  });
+                                  if (res.ok) saved = true;
+                                }
+                              }
+                              if (saved) {
+                                setByokMsg(ts.byokSaved);
+                                setByokEditing(null);
+                                const data = await fetch("/api/api-keys").then((r) => r.json());
+                                setApiKeys(data.keys || []);
+                              }
+                            } finally {
+                              setByokSaving(false);
+                              setTimeout(() => setByokMsg(""), 3000);
+                            }
+                          }}
+                          disabled={byokSaving}
+                          className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {byokSaving ? "..." : ts.byokSave}
+                        </button>
+                        <button
+                          onClick={() => setByokEditing(null)}
+                          className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 transition-colors cursor-pointer"
+                        >
+                          {tc.cancel}
+                        </button>
+                        {twitterConfigured.length > 0 && (
+                          <button
+                            onClick={async () => {
+                              for (const tk of twitterKeys) {
+                                await fetch("/api/api-keys", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "delete", service: tk.service }),
+                                });
+                              }
+                              setByokMsg(ts.byokDeleted);
+                              setByokEditing(null);
+                              const data = await fetch("/api/api-keys").then((r) => r.json());
+                              setApiKeys(data.keys || []);
+                              setTimeout(() => setByokMsg(""), 3000);
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded border border-red-200 transition-colors cursor-pointer"
+                          >
+                            {ts.byokDelete}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           {byokMsg && <p className="text-sm text-green-600 mt-3">{byokMsg}</p>}
         </div>

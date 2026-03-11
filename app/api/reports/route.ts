@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
-import { execSync } from "child_process";
+import { exec } from "child_process";
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
 
 export const dynamic = "force-dynamic";
@@ -31,7 +31,6 @@ function detectProject(name: string): string {
   if (name.includes("unincore")) return "Unincore";
   if (name.includes("ouxi")) return "OUXI";
   if (name.includes("jytech")) return "JY Tech";
-  // Generic jobs — don't assign to a specific project
   return "General";
 }
 
@@ -79,25 +78,38 @@ function extractMetrics(text: string): Record<string, number> {
   return metrics;
 }
 
-function readOpenClawData(): { jobs: CronJob[]; summaries: Record<string, string> } {
+function execAsync(command: string, timeout: number): Promise<string> {
+  return new Promise((resolve) => {
+    exec(command, { timeout, encoding: "utf-8" }, (error, stdout) => {
+      if (error) {
+        resolve("");
+        return;
+      }
+      resolve(stdout);
+    });
+  });
+}
+
+async function readOpenClawData(): Promise<{ jobs: CronJob[]; summaries: Record<string, string> }> {
   try {
-    const jobsRaw = execSync(
-      "docker exec openclaw-gateway cat /home/node/.openclaw/cron/jobs.json",
-      { timeout: 5000, encoding: "utf-8" }
-    );
+    // Run both Docker commands concurrently
+    const [jobsRaw, summariesRaw] = await Promise.all([
+      execAsync("docker exec openclaw-gateway cat /home/node/.openclaw/cron/jobs.json", 5000),
+      execAsync("docker exec openclaw-gateway node /tmp/extract-sessions.js", 15000),
+    ]);
+
+    if (!jobsRaw) return { jobs: [], summaries: {} };
+
     const jobsData = JSON.parse(jobsRaw);
     const jobs: CronJob[] = jobsData.jobs || [];
 
-    // Read latest session summaries via pre-deployed extraction script
     let summaries: Record<string, string> = {};
-    try {
-      const summariesRaw = execSync(
-        "docker exec openclaw-gateway node /tmp/extract-sessions.js",
-        { timeout: 15000, encoding: "utf-8" }
-      );
-      summaries = JSON.parse(summariesRaw.trim());
-    } catch {
-      // Script not deployed yet or extraction failed - continue with jobs only
+    if (summariesRaw) {
+      try {
+        summaries = JSON.parse(summariesRaw.trim());
+      } catch {
+        // Parse failed — continue with empty summaries
+      }
     }
 
     return { jobs, summaries };
@@ -121,7 +133,6 @@ function fallbackSummary(job: CronJob, locale: string): string {
   return `Status: ${statusLabel}. Duration: ${durationSec}s.`;
 }
 
-// Map cron job project labels to DB project names (for matching)
 const PROJECT_ALIASES: Record<string, string[]> = {
   "Iris Limo": ["iris", "limo", "iris-limo"],
   "GPULaw": ["gpulaw"],
@@ -131,18 +142,293 @@ const PROJECT_ALIASES: Record<string, string[]> = {
 };
 
 function matchesUserProject(cronProject: string, userProjectNames: string[]): boolean {
-  // Direct match
   if (userProjectNames.includes(cronProject)) return true;
-  // Check aliases
   for (const userProject of userProjectNames) {
     const aliases = PROJECT_ALIASES[userProject];
     if (aliases && aliases.some((a) => cronProject.toLowerCase().includes(a))) return true;
-    // Fuzzy: check if cron project name is contained in user project name or vice versa
     if (cronProject.toLowerCase().includes(userProject.toLowerCase())) return true;
     if (userProject.toLowerCase().includes(cronProject.toLowerCase())) return true;
   }
   return false;
 }
+
+// ── Brevo data fetching (all 3 calls in parallel) ──
+
+interface BrevoCampaign {
+  id: number;
+  name: string;
+  status: string;
+  sent: number;
+  delivered: number;
+  opened: number;
+  clicked: number;
+  project: string;
+  sentDate?: string;
+}
+
+interface BrevoResult {
+  brevoStats: { emailsSent: number; delivered: number; opened: number; clicked: number };
+  brevoCampaigns: BrevoCampaign[];
+  brevoLists: { name: string; totalSubscribers: number; uniqueSubscribers: number }[];
+}
+
+async function fetchBrevoData(): Promise<BrevoResult> {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) return { brevoStats: { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 }, brevoCampaigns: [], brevoLists: [] };
+
+  const headers = { "api-key": apiKey, accept: "application/json" };
+
+  try {
+    // Run all 3 Brevo API calls concurrently
+    const [aggRes, campRes, listsRes] = await Promise.all([
+      fetch("https://api.brevo.com/v3/smtp/statistics/aggregatedReport", { headers }),
+      fetch("https://api.brevo.com/v3/emailCampaigns?limit=50&sort=desc", { headers }),
+      fetch("https://api.brevo.com/v3/contacts/lists?limit=50", { headers }),
+    ]);
+
+    let brevoStats = { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 };
+    if (aggRes.ok) {
+      const data = await aggRes.json();
+      brevoStats = {
+        emailsSent: data.requests || 0,
+        delivered: data.delivered || 0,
+        opened: data.uniqueOpens || 0,
+        clicked: data.uniqueClicks || 0,
+      };
+    }
+
+    let brevoCampaigns: BrevoCampaign[] = [];
+    if (campRes.ok) {
+      const campData = await campRes.json();
+      brevoCampaigns = (campData.campaigns || []).map((c: Record<string, unknown>) => {
+        const statsObj = c.statistics as Record<string, unknown> | undefined;
+        const globalStats = (statsObj?.globalStats as Record<string, number>) || {};
+        const campStats = (statsObj?.campaignStats as Record<string, number>[]) || [];
+        const aggregated = campStats.reduce(
+          (acc, cs) => ({
+            sent: acc.sent + (cs.sent || 0),
+            delivered: acc.delivered + (cs.delivered || 0),
+            uniqueViews: acc.uniqueViews + (cs.uniqueViews || 0),
+            uniqueClicks: acc.uniqueClicks + (cs.uniqueClicks || 0),
+          }),
+          { sent: 0, delivered: 0, uniqueViews: 0, uniqueClicks: 0 }
+        );
+        const sent = globalStats.sent || aggregated.sent;
+        const delivered = globalStats.delivered || aggregated.delivered;
+        const opened = globalStats.uniqueOpens || globalStats.uniqueViews || aggregated.uniqueViews;
+        const clicked = globalStats.uniqueClicks || aggregated.uniqueClicks;
+        const campName = (c.name as string) || (c.subject as string) || "";
+        return {
+          id: c.id as number,
+          name: campName,
+          status: (c.status as string) || "unknown",
+          sent,
+          delivered,
+          opened,
+          clicked,
+          project: detectProject(campName.toLowerCase().replace(/\s+/g, "-")),
+          sentDate: (c.sentDate as string) || (c.scheduledAt as string) || "",
+        };
+      });
+    }
+
+    let brevoLists: { name: string; totalSubscribers: number; uniqueSubscribers: number }[] = [];
+    if (listsRes.ok) {
+      const listsData = await listsRes.json();
+      brevoLists = listsData.lists || [];
+    }
+
+    return { brevoStats, brevoCampaigns, brevoLists };
+  } catch {
+    return { brevoStats: { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 }, brevoCampaigns: [], brevoLists: [] };
+  }
+}
+
+// ── GA4 data fetching (all properties in parallel, totals+daily combined) ──
+
+interface GaResult {
+  gaStats: { totalUsers: number; sessions: number; pageViews: number };
+  gaProjects: { project: string; status: "ok" | "no_data" | "error"; error?: string; data: { date: string; users: number; sessions: number; pageViews: number }[] }[];
+}
+
+async function fetchGaData(propertyProjectMap: Record<string, string>): Promise<GaResult> {
+  const gaPropertyIds = Object.keys(propertyProjectMap);
+  if (!process.env.GA_SERVICE_ACCOUNT_KEY || gaPropertyIds.length === 0) {
+    return { gaStats: { totalUsers: 0, sessions: 0, pageViews: 0 }, gaProjects: [] };
+  }
+
+  try {
+    const credentials = JSON.parse(process.env.GA_SERVICE_ACCOUNT_KEY);
+    const analyticsClient = new BetaAnalyticsDataClient({ credentials });
+
+    // Run all properties concurrently, each with totals + daily in parallel
+    const results = await Promise.all(
+      gaPropertyIds.map(async (propertyId) => {
+        const projectName = propertyProjectMap[propertyId];
+        try {
+          const [totalsResponse, dailyResponse] = await Promise.all([
+            analyticsClient.runReport({
+              property: `properties/${propertyId}`,
+              dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+              metrics: [
+                { name: "totalUsers" },
+                { name: "sessions" },
+                { name: "screenPageViews" },
+              ],
+            }),
+            analyticsClient.runReport({
+              property: `properties/${propertyId}`,
+              dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
+              dimensions: [{ name: "date" }],
+              metrics: [
+                { name: "totalUsers" },
+                { name: "sessions" },
+                { name: "screenPageViews" },
+              ],
+              orderBys: [{ dimension: { dimensionName: "date", orderType: "ALPHANUMERIC" } }],
+            }),
+          ]);
+
+          const [response] = totalsResponse;
+          let totalUsers = 0, sessions = 0, pageViews = 0;
+          if (response.rows?.[0]?.metricValues) {
+            const vals = response.rows[0].metricValues;
+            totalUsers = Number(vals[0]?.value || 0);
+            sessions = Number(vals[1]?.value || 0);
+            pageViews = Number(vals[2]?.value || 0);
+          }
+
+          const [dailyRes] = dailyResponse;
+          const dailyData: { date: string; users: number; sessions: number; pageViews: number }[] = [];
+          for (const row of dailyRes.rows || []) {
+            const dateStr = row.dimensionValues?.[0]?.value || "";
+            const formatted = dateStr.length === 8
+              ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+              : dateStr;
+            dailyData.push({
+              date: formatted,
+              users: Number(row.metricValues?.[0]?.value || 0),
+              sessions: Number(row.metricValues?.[1]?.value || 0),
+              pageViews: Number(row.metricValues?.[2]?.value || 0),
+            });
+          }
+
+          const hasData = dailyData.length > 0 || totalUsers > 0 || sessions > 0 || pageViews > 0;
+          return { projectName, totalUsers, sessions, pageViews, dailyData, status: hasData ? "ok" as const : "no_data" as const };
+        } catch (err) {
+          console.error(`GA4 error for property ${propertyId} (${projectName}):`, err);
+          const errMsg = err instanceof Error ? err.message : "Unknown error";
+          return { projectName, totalUsers: 0, sessions: 0, pageViews: 0, dailyData: [], status: "error" as const, error: errMsg };
+        }
+      })
+    );
+
+    const gaStats = { totalUsers: 0, sessions: 0, pageViews: 0 };
+    const gaProjects: GaResult["gaProjects"] = [];
+    for (const r of results) {
+      gaStats.totalUsers += r.totalUsers;
+      gaStats.sessions += r.sessions;
+      gaStats.pageViews += r.pageViews;
+      gaProjects.push({ project: r.projectName, status: r.status, error: r.error, data: r.dailyData });
+    }
+
+    return { gaStats, gaProjects };
+  } catch {
+    return { gaStats: { totalUsers: 0, sessions: 0, pageViews: 0 }, gaProjects: [] };
+  }
+}
+
+// ── Token usage fetching ──
+
+interface TokenResult {
+  tokenUsage: { date: string; project: string; prompt_tokens: number; completion_tokens: number; total_tokens: number }[];
+  tokenSummary: { totalTokens: number; promptTokens: number; completionTokens: number };
+}
+
+async function fetchTokenUsage(
+  sql: ReturnType<typeof getDb>,
+  userId: number,
+  projectIds: number[],
+  isAdmin: boolean,
+  isEnterprise: boolean
+): Promise<TokenResult> {
+  try {
+    if (projectIds.length === 0 && !isAdmin && !isEnterprise) {
+      return { tokenUsage: [], tokenSummary: { totalTokens: 0, promptTokens: 0, completionTokens: 0 } };
+    }
+
+    const rows = (isAdmin || isEnterprise)
+      ? await sql`
+          SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
+            SUM(tu.prompt_tokens)::int as prompt_tokens,
+            SUM(tu.completion_tokens)::int as completion_tokens,
+            SUM(tu.total_tokens)::int as total_tokens
+          FROM token_usage tu
+          LEFT JOIN projects p ON tu.project_id = p.id
+          WHERE tu.created_at >= NOW() - INTERVAL '30 days'
+          GROUP BY DATE(tu.created_at), COALESCE(p.name, 'General')
+          ORDER BY date`
+      : await sql`
+          SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
+            SUM(tu.prompt_tokens)::int as prompt_tokens,
+            SUM(tu.completion_tokens)::int as completion_tokens,
+            SUM(tu.total_tokens)::int as total_tokens
+          FROM token_usage tu
+          LEFT JOIN projects p ON tu.project_id = p.id
+          WHERE (tu.project_id = ANY(${projectIds}) OR tu.user_id = ${userId})
+            AND tu.created_at >= NOW() - INTERVAL '30 days'
+          GROUP BY DATE(tu.created_at), COALESCE(p.name, 'General')
+          ORDER BY date`;
+
+    const tokenUsage = rows.map((r) => ({
+      date: (r.date as Date).toISOString().slice(0, 10),
+      project: r.project as string,
+      prompt_tokens: r.prompt_tokens as number,
+      completion_tokens: r.completion_tokens as number,
+      total_tokens: r.total_tokens as number,
+    }));
+
+    const tokenSummary = { totalTokens: 0, promptTokens: 0, completionTokens: 0 };
+    for (const r of rows) {
+      tokenSummary.totalTokens += r.total_tokens as number;
+      tokenSummary.promptTokens += r.prompt_tokens as number;
+      tokenSummary.completionTokens += r.completion_tokens as number;
+    }
+
+    return { tokenUsage, tokenSummary };
+  } catch {
+    return { tokenUsage: [], tokenSummary: { totalTokens: 0, promptTokens: 0, completionTokens: 0 } };
+  }
+}
+
+// ── DB agent reports fetching ──
+
+async function fetchDbAgentReports(sql: ReturnType<typeof getDb>): Promise<Record<string, { summary: string; metrics: Record<string, unknown>; project: string }>> {
+  try {
+    const dbReports = await sql`
+      SELECT ar.task_name, ar.summary, ar.metrics, p.name as project_name
+      FROM agent_reports ar
+      JOIN projects p ON ar.project_id = p.id
+      ORDER BY ar.created_at DESC
+    `;
+    const reportByTask: Record<string, { summary: string; metrics: Record<string, unknown>; project: string }> = {};
+    for (const r of dbReports) {
+      const taskName = r.task_name as string;
+      if (!reportByTask[taskName]) {
+        reportByTask[taskName] = {
+          summary: r.summary as string,
+          metrics: (r.metrics as Record<string, unknown>) || {},
+          project: r.project_name as string,
+        };
+      }
+    }
+    return reportByTask;
+  } catch {
+    return {};
+  }
+}
+
+// ── Main handler ──
 
 export async function GET(request: Request) {
   const session = await auth0.getSession();
@@ -154,7 +440,6 @@ export async function GET(request: Request) {
   const locale = url.searchParams.get("locale") || "en";
   const email = session.user.email as string;
 
-  // Look up user and their projects + role
   const sql = getDb();
   let users = await sql`SELECT id, role, plan FROM users WHERE email = ${email}`;
   if (users.length === 0) {
@@ -164,16 +449,36 @@ export async function GET(request: Request) {
   const isAdmin = users[0].role === "admin";
   const isEnterprise = users[0].plan === "enterprise";
 
-  // Extract email domain for domain-based project sharing (enterprise feature)
   const emailDomain = email.split("@")[1] || "";
   const userProjects = isAdmin
     ? await sql`SELECT id, name, ga_property_id FROM projects`
-    : await sql`SELECT DISTINCT ON (name) id, name, ga_property_id FROM projects WHERE user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}) ORDER BY name`;
+    : await sql`SELECT DISTINCT ON (name) id, name, ga_property_id FROM projects WHERE user_id = ${userId} OR id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}) ORDER BY name`;
   const userProjectNames = userProjects.map((p) => p.name as string);
-  // Use first project name as default label for "General" jobs
-  const defaultProjectName = userProjectNames[0] || "General";
+  const projectIds = userProjects.map((p) => p.id as number);
 
-  const { jobs, summaries } = readOpenClawData();
+  // Build GA property → project mapping
+  const propertyProjectMap: Record<string, string> = {};
+  for (const p of userProjects) {
+    const pid = p.ga_property_id as string;
+    if (pid && !propertyProjectMap[pid]) {
+      propertyProjectMap[pid] = p.name as string;
+    }
+  }
+
+  // ── Run ALL data sources concurrently ──
+  const [openClawData, brevoData, gaData, tokenData, dbReportsByTask] = await Promise.all([
+    readOpenClawData(),
+    fetchBrevoData(),
+    fetchGaData(propertyProjectMap),
+    fetchTokenUsage(sql, userId as number, projectIds, isAdmin, isEnterprise),
+    fetchDbAgentReports(sql),
+  ]);
+
+  const { jobs, summaries } = openClawData;
+  let { brevoStats, brevoCampaigns } = brevoData;
+  const { brevoLists } = brevoData;
+  const { gaStats, gaProjects } = gaData;
+  const { tokenUsage, tokenSummary } = tokenData;
 
   // Build report for each job (only jobs that have run)
   const allReports = jobs
@@ -201,13 +506,11 @@ export async function GET(request: Request) {
       };
     });
 
-  // Admin sees all reports; regular users see only their project reports (no "General" fallback)
   const reports = isAdmin
     ? allReports
-    : allReports
-        .filter((r) => r.project !== "General" && matchesUserProject(r.project, userProjectNames));
+    : allReports.filter((r) => r.project !== "General" && matchesUserProject(r.project, userProjectNames));
 
-  // Build server agents list from ALL configured jobs (including ones that haven't run yet)
+  // Build server agents list from ALL configured jobs
   const allServerAgents = jobs
     .sort((a, b) => (b.state.lastRunAtMs || 0) - (a.state.lastRunAtMs || 0))
     .map((job) => {
@@ -237,331 +540,98 @@ export async function GET(request: Request) {
 
   const serverAgents = isAdmin
     ? allServerAgents
-    : allServerAgents
-        .filter((a) => a.project !== "General" && matchesUserProject(a.project, userProjectNames));
+    : allServerAgents.filter((a) => a.project !== "General" && matchesUserProject(a.project, userProjectNames));
 
-  // Fetch Brevo email statistics
-  let brevoStats = { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 };
-  interface BrevoCampaign {
-    id: number;
-    name: string;
-    status: string;
-    sent: number;
-    delivered: number;
-    opened: number;
-    clicked: number;
-    project: string;
-    sentDate?: string;
-  }
-  let brevoCampaigns: BrevoCampaign[] = [];
-  if (process.env.BREVO_API_KEY) {
-    try {
-      const [aggRes, campRes] = await Promise.all([
-        fetch("https://api.brevo.com/v3/smtp/statistics/aggregatedReport", {
-          headers: { "api-key": process.env.BREVO_API_KEY, accept: "application/json" },
-        }),
-        fetch("https://api.brevo.com/v3/emailCampaigns?limit=50&sort=desc", {
-          headers: { "api-key": process.env.BREVO_API_KEY, accept: "application/json" },
-        }),
-      ]);
-      if (aggRes.ok) {
-        const data = await aggRes.json();
-        brevoStats = {
-          emailsSent: data.requests || 0,
-          delivered: data.delivered || 0,
-          opened: data.uniqueOpens || 0,
-          clicked: data.uniqueClicks || 0,
-        };
-      }
-      if (campRes.ok) {
-        const campData = await campRes.json();
-        const allCampaigns: BrevoCampaign[] = (campData.campaigns || []).map((c: Record<string, unknown>) => {
-          const statsObj = c.statistics as Record<string, unknown> | undefined;
-          const globalStats = (statsObj?.globalStats as Record<string, number>) || {};
-          // Brevo sometimes puts actual data in campaignStats (per-list) instead of globalStats
-          const campStats = (statsObj?.campaignStats as Record<string, number>[]) || [];
-          const aggregated = campStats.reduce(
-            (acc, cs) => ({
-              sent: acc.sent + (cs.sent || 0),
-              delivered: acc.delivered + (cs.delivered || 0),
-              uniqueViews: acc.uniqueViews + (cs.uniqueViews || 0),
-              uniqueClicks: acc.uniqueClicks + (cs.uniqueClicks || 0),
-            }),
-            { sent: 0, delivered: 0, uniqueViews: 0, uniqueClicks: 0 }
-          );
-          // Use campaignStats if globalStats are zero but campaignStats have data
-          const sent = globalStats.sent || aggregated.sent;
-          const delivered = globalStats.delivered || aggregated.delivered;
-          const opened = globalStats.uniqueOpens || globalStats.uniqueViews || aggregated.uniqueViews;
-          const clicked = globalStats.uniqueClicks || aggregated.uniqueClicks;
-          const campName = (c.name as string) || (c.subject as string) || "";
-          return {
-            id: c.id as number,
-            name: campName,
-            status: (c.status as string) || "unknown",
-            sent,
-            delivered,
-            opened,
-            clicked,
-            project: detectProject(campName.toLowerCase().replace(/\s+/g, "-")),
-            sentDate: (c.sentDate as string) || (c.scheduledAt as string) || "",
-          };
-        });
-        // Filter campaigns by user's projects (admin sees all, non-admin only sees their projects — no "General" fallback)
-        brevoCampaigns = isAdmin
-          ? allCampaigns
-          : allCampaigns.filter((c) =>
-              c.project !== "General" && matchesUserProject(c.project, userProjectNames)
-            );
-        // For non-admin users, recompute brevoStats from their filtered campaigns only
-        if (!isAdmin && brevoCampaigns.length > 0) {
-          brevoStats = brevoCampaigns.reduce(
-            (acc, c) => ({
-              emailsSent: acc.emailsSent + c.sent,
-              delivered: acc.delivered + c.delivered,
-              opened: acc.opened + c.opened,
-              clicked: acc.clicked + c.clicked,
-            }),
-            { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 }
-          );
-        }
-      }
-    } catch {
-      // Brevo API unavailable — continue with defaults
-    }
+  // ── Filter Brevo campaigns by user projects ──
+  if (!isAdmin) {
+    brevoCampaigns = brevoCampaigns.filter((c) =>
+      c.project !== "General" && matchesUserProject(c.project, userProjectNames)
+    );
+    brevoStats = brevoCampaigns.reduce(
+      (acc, c) => ({
+        emailsSent: acc.emailsSent + c.sent,
+        delivered: acc.delivered + c.delivered,
+        opened: acc.opened + c.opened,
+        clicked: acc.clicked + c.clicked,
+      }),
+      { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 }
+    );
   }
 
-  // Fetch GA4 traffic statistics (last 30 days)
-  let gaStats = { totalUsers: 0, sessions: 0, pageViews: 0 };
-  // Build property → project name mapping (deduplicate by property ID)
-  const propertyProjectMap: Record<string, string> = {};
-  for (const p of userProjects) {
-    const pid = p.ga_property_id as string;
-    if (pid && !propertyProjectMap[pid]) {
-      propertyProjectMap[pid] = p.name as string;
-    }
-  }
-  const gaPropertyIds = Object.keys(propertyProjectMap);
-  // Per-project daily data: { projectName: string, data: DailyPoint[] }[]
-  const gaProjects: { project: string; data: { date: string; users: number; sessions: number; pageViews: number }[] }[] = [];
-
-  if (process.env.GA_SERVICE_ACCOUNT_KEY && gaPropertyIds.length > 0) {
-    try {
-      const credentials = JSON.parse(process.env.GA_SERVICE_ACCOUNT_KEY);
-      const analyticsClient = new BetaAnalyticsDataClient({ credentials });
-
-      for (const propertyId of gaPropertyIds) {
-        const projectName = propertyProjectMap[propertyId];
-        try {
-          // Totals
-          const [response] = await analyticsClient.runReport({
-            property: `properties/${propertyId}`,
-            dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
-            metrics: [
-              { name: "totalUsers" },
-              { name: "sessions" },
-              { name: "screenPageViews" },
-            ],
-          });
-          if (response.rows?.[0]?.metricValues) {
-            const vals = response.rows[0].metricValues;
-            gaStats.totalUsers += Number(vals[0]?.value || 0);
-            gaStats.sessions += Number(vals[1]?.value || 0);
-            gaStats.pageViews += Number(vals[2]?.value || 0);
-          }
-          // Daily breakdown per project
-          const [dailyRes] = await analyticsClient.runReport({
-            property: `properties/${propertyId}`,
-            dateRanges: [{ startDate: "30daysAgo", endDate: "today" }],
-            dimensions: [{ name: "date" }],
-            metrics: [
-              { name: "totalUsers" },
-              { name: "sessions" },
-              { name: "screenPageViews" },
-            ],
-            orderBys: [{ dimension: { dimensionName: "date", orderType: "ALPHANUMERIC" } }],
-          });
-          const dailyData: { date: string; users: number; sessions: number; pageViews: number }[] = [];
-          for (const row of dailyRes.rows || []) {
-            const dateStr = row.dimensionValues?.[0]?.value || "";
-            const formatted = dateStr.length === 8
-              ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
-              : dateStr;
-            dailyData.push({
-              date: formatted,
-              users: Number(row.metricValues?.[0]?.value || 0),
-              sessions: Number(row.metricValues?.[1]?.value || 0),
-              pageViews: Number(row.metricValues?.[2]?.value || 0),
-            });
-          }
-          gaProjects.push({ project: projectName, data: dailyData });
-        } catch (err) {
-          // Log per-property error but continue with other properties
-          console.error(`GA4 error for property ${propertyId} (${projectName}):`, err);
-        }
+  // ── Enrich server agents with Brevo campaign data ──
+  if (brevoCampaigns.length > 0) {
+    const campaignsByProject: Record<string, { sent: number; delivered: number; opened: number; clicked: number; latestDate: string }> = {};
+    for (const c of brevoCampaigns) {
+      if (c.status !== "sent") continue;
+      if (!campaignsByProject[c.project]) {
+        campaignsByProject[c.project] = { sent: 0, delivered: 0, opened: 0, clicked: 0, latestDate: "" };
       }
-    } catch {
-      // GA4 credentials invalid — continue with defaults
-    }
-  }
-
-  // Enrich server agents with Brevo data (campaigns + contact lists)
-  if (process.env.BREVO_API_KEY) {
-    // 1) Campaign stats → email marketing agents
-    if (brevoCampaigns.length > 0) {
-      const campaignsByProject: Record<string, { sent: number; delivered: number; opened: number; clicked: number; latestDate: string }> = {};
-      for (const c of brevoCampaigns) {
-        if (c.status !== "sent") continue;
-        if (!campaignsByProject[c.project]) {
-          campaignsByProject[c.project] = { sent: 0, delivered: 0, opened: 0, clicked: 0, latestDate: "" };
-        }
-        const agg = campaignsByProject[c.project];
-        agg.sent += c.sent;
-        agg.delivered += c.delivered;
-        agg.opened += c.opened;
-        agg.clicked += c.clicked;
-        if (c.sentDate && c.sentDate > agg.latestDate) agg.latestDate = c.sentDate;
-      }
-      for (const agent of serverAgents) {
-        const projStats = campaignsByProject[agent.project];
-        if (!projStats) continue;
-        if (agent.period === "email_marketing" && agent.status === "pending") {
-          agent.status = "active";
-          agent.metrics = {
-            emails_sent: projStats.sent,
-            delivered: projStats.delivered,
-            opened: projStats.opened,
-            clicked: projStats.clicked,
-          };
-          const openRate = projStats.delivered > 0 ? ((projStats.opened / projStats.delivered) * 100).toFixed(1) : "0";
-          const clickRate = projStats.delivered > 0 ? ((projStats.clicked / projStats.delivered) * 100).toFixed(1) : "0";
-          agent.summary = locale === "zh"
-            ? `已发送 ${projStats.sent} 封邮件，送达 ${projStats.delivered}，打开率 ${openRate}%，点击率 ${clickRate}%`
-            : `Sent ${projStats.sent} emails, ${projStats.delivered} delivered, ${openRate}% open rate, ${clickRate}% click rate`;
-          if (projStats.latestDate) agent.last_run = projStats.latestDate;
-        }
-      }
-    }
-
-    // 2) Contact lists → lead generation / prospecting agents
-    try {
-      const listsRes = await fetch("https://api.brevo.com/v3/contacts/lists?limit=50", {
-        headers: { "api-key": process.env.BREVO_API_KEY, accept: "application/json" },
-      });
-      if (listsRes.ok) {
-        const listsData = await listsRes.json();
-        const lists: { name: string; totalSubscribers: number; uniqueSubscribers: number }[] = listsData.lists || [];
-        // Map lists to projects and aggregate contact counts
-        // Brevo returns actual count in uniqueSubscribers (totalSubscribers is often 0)
-        const leadsByProject: Record<string, number> = {};
-        for (const list of lists) {
-          const count = list.uniqueSubscribers || list.totalSubscribers;
-          if (!count) continue;
-          const project = detectProject(list.name.toLowerCase().replace(/\s+/g, "-"));
-          leadsByProject[project] = (leadsByProject[project] || 0) + count;
-        }
-        for (const agent of serverAgents) {
-          const leadCount = leadsByProject[agent.project];
-          if (!leadCount) continue;
-          if (agent.period === "lead_generation" && agent.status === "pending") {
-            agent.status = "active";
-            agent.metrics = { contacts_found: leadCount };
-            agent.summary = locale === "zh"
-              ? `已找到 ${leadCount} 个潜在客户联系人`
-              : `Found ${leadCount} prospect contacts`;
-          }
-        }
-      }
-    } catch {
-      // Brevo lists API unavailable — continue
-    }
-  }
-
-  // 3) Enrich server agents with DB agent_reports data
-  try {
-    const dbReports = await sql`
-      SELECT ar.task_name, ar.summary, ar.metrics, p.name as project_name
-      FROM agent_reports ar
-      JOIN projects p ON ar.project_id = p.id
-      ORDER BY ar.created_at DESC
-    `;
-    // Build a map: task_name → latest report
-    const reportByTask: Record<string, { summary: string; metrics: Record<string, unknown>; project: string }> = {};
-    for (const r of dbReports) {
-      const taskName = r.task_name as string;
-      if (!reportByTask[taskName]) {
-        reportByTask[taskName] = {
-          summary: r.summary as string,
-          metrics: (r.metrics as Record<string, unknown>) || {},
-          project: r.project_name as string,
-        };
-      }
+      const agg = campaignsByProject[c.project];
+      agg.sent += c.sent;
+      agg.delivered += c.delivered;
+      agg.opened += c.opened;
+      agg.clicked += c.clicked;
+      if (c.sentDate && c.sentDate > agg.latestDate) agg.latestDate = c.sentDate;
     }
     for (const agent of serverAgents) {
-      const dbReport = reportByTask[agent.agent];
-      if (!dbReport) continue;
-      if (agent.status === "pending" && dbReport.summary && Object.keys(dbReport.metrics).length > 0) {
+      const projStats = campaignsByProject[agent.project];
+      if (!projStats) continue;
+      if (agent.period === "email_marketing" && agent.status === "pending") {
         agent.status = "active";
-        agent.summary = dbReport.summary;
-        // Filter out non-numeric fields for metrics display
-        const numericMetrics: Record<string, number> = {};
-        for (const [k, v] of Object.entries(dbReport.metrics)) {
-          if (typeof v === "number") numericMetrics[k] = v;
-        }
-        if (Object.keys(numericMetrics).length > 0) {
-          agent.metrics = numericMetrics;
-        }
+        agent.metrics = {
+          emails_sent: projStats.sent,
+          delivered: projStats.delivered,
+          opened: projStats.opened,
+          clicked: projStats.clicked,
+        };
+        const openRate = projStats.delivered > 0 ? ((projStats.opened / projStats.delivered) * 100).toFixed(1) : "0";
+        const clickRate = projStats.delivered > 0 ? ((projStats.clicked / projStats.delivered) * 100).toFixed(1) : "0";
+        agent.summary = locale === "zh"
+          ? `已发送 ${projStats.sent} 封邮件，送达 ${projStats.delivered}，打开率 ${openRate}%，点击率 ${clickRate}%`
+          : `Sent ${projStats.sent} emails, ${projStats.delivered} delivered, ${openRate}% open rate, ${clickRate}% click rate`;
+        if (projStats.latestDate) agent.last_run = projStats.latestDate;
       }
     }
-  } catch {
-    // DB query failed — continue with existing data
   }
 
-  // Fetch token usage (last 30 days) grouped by date and project
-  let tokenUsage: { date: string; project: string; prompt_tokens: number; completion_tokens: number; total_tokens: number }[] = [];
-  let tokenSummary = { totalTokens: 0, promptTokens: 0, completionTokens: 0 };
-  try {
-    const projectIds = userProjects.map((p) => p.id as number);
-    if (projectIds.length > 0 || isAdmin || isEnterprise) {
-      // Enterprise users see all token usage (like admin) since they pay for the platform
-      const rows = (isAdmin || isEnterprise)
-        ? await sql`
-            SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
-              SUM(tu.prompt_tokens)::int as prompt_tokens,
-              SUM(tu.completion_tokens)::int as completion_tokens,
-              SUM(tu.total_tokens)::int as total_tokens
-            FROM token_usage tu
-            LEFT JOIN projects p ON tu.project_id = p.id
-            WHERE tu.created_at >= NOW() - INTERVAL '30 days'
-            GROUP BY DATE(tu.created_at), COALESCE(p.name, 'General')
-            ORDER BY date`
-        : await sql`
-            SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
-              SUM(tu.prompt_tokens)::int as prompt_tokens,
-              SUM(tu.completion_tokens)::int as completion_tokens,
-              SUM(tu.total_tokens)::int as total_tokens
-            FROM token_usage tu
-            LEFT JOIN projects p ON tu.project_id = p.id
-            WHERE (tu.project_id = ANY(${projectIds}) OR tu.user_id = ${userId})
-              AND tu.created_at >= NOW() - INTERVAL '30 days'
-            GROUP BY DATE(tu.created_at), COALESCE(p.name, 'General')
-            ORDER BY date`;
-      tokenUsage = rows.map((r) => ({
-        date: (r.date as Date).toISOString().slice(0, 10),
-        project: r.project as string,
-        prompt_tokens: r.prompt_tokens as number,
-        completion_tokens: r.completion_tokens as number,
-        total_tokens: r.total_tokens as number,
-      }));
-      for (const r of rows) {
-        tokenSummary.totalTokens += r.total_tokens as number;
-        tokenSummary.promptTokens += r.prompt_tokens as number;
-        tokenSummary.completionTokens += r.completion_tokens as number;
+  // ── Enrich server agents with Brevo contact list data ──
+  if (brevoLists.length > 0) {
+    const leadsByProject: Record<string, number> = {};
+    for (const list of brevoLists) {
+      const count = list.uniqueSubscribers || list.totalSubscribers;
+      if (!count) continue;
+      const project = detectProject(list.name.toLowerCase().replace(/\s+/g, "-"));
+      leadsByProject[project] = (leadsByProject[project] || 0) + count;
+    }
+    for (const agent of serverAgents) {
+      const leadCount = leadsByProject[agent.project];
+      if (!leadCount) continue;
+      if (agent.period === "lead_generation" && agent.status === "pending") {
+        agent.status = "active";
+        agent.metrics = { contacts_found: leadCount };
+        agent.summary = locale === "zh"
+          ? `已找到 ${leadCount} 个潜在客户联系人`
+          : `Found ${leadCount} prospect contacts`;
       }
     }
-  } catch {
-    // Token usage query failed — continue
   }
 
-  return NextResponse.json({ reports, agents: [], serverAgents, brevoStats, brevoCampaigns, gaStats, gaProjects, tokenUsage, tokenSummary });
+  // ── Enrich server agents with DB agent_reports data ──
+  for (const agent of serverAgents) {
+    const dbReport = dbReportsByTask[agent.agent];
+    if (!dbReport) continue;
+    if (agent.status === "pending" && dbReport.summary && Object.keys(dbReport.metrics).length > 0) {
+      agent.status = "active";
+      agent.summary = dbReport.summary;
+      const numericMetrics: Record<string, number> = {};
+      for (const [k, v] of Object.entries(dbReport.metrics)) {
+        if (typeof v === "number") numericMetrics[k] = v;
+      }
+      if (Object.keys(numericMetrics).length > 0) {
+        agent.metrics = numericMetrics;
+      }
+    }
+  }
+
+  return NextResponse.json({ plan: users[0].plan || "starter", reports, agents: [], serverAgents, brevoStats, brevoCampaigns, gaStats, gaProjects, tokenUsage, tokenSummary });
 }

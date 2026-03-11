@@ -10,9 +10,10 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS organizations (
   id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
+  name VARCHAR(255) NOT NULL UNIQUE,
   domain VARCHAR(255),
   created_by INTEGER REFERENCES users(id),
+  plan VARCHAR(50) DEFAULT 'starter',
   created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -35,6 +36,15 @@ CREATE TABLE IF NOT EXISTS projects (
   domain VARCHAR(255),
   org_id INTEGER REFERENCES organizations(id) ON DELETE SET NULL,
   created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS project_members (
+  id SERIAL PRIMARY KEY,
+  project_id INTEGER REFERENCES projects(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  role VARCHAR(50) DEFAULT 'member',
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(project_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS agent_assignments (

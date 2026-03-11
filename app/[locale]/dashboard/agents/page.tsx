@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import UserPlanBadge from "@/components/UserPlanBadge";
 
 interface AgentAssignment {
   id: number;
@@ -85,9 +86,10 @@ export default function AgentsPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const loadData = () => {
+    const ts = Date.now();
     return Promise.all([
-      fetch("/api/reports").then((r) => r.json()),
-      fetch("/api/projects").then((r) => r.json()),
+      fetch(`/api/reports?_t=${ts}`).then((r) => r.json()),
+      fetch(`/api/projects?_t=${ts}`).then((r) => r.json()),
     ]).then(([reportData, projectData]) => {
       setAgents(reportData.agents || []);
       setServerAgents(reportData.serverAgents || reportData.reports || []);
@@ -188,7 +190,7 @@ export default function AgentsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{ta.signInAgents}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -205,7 +207,7 @@ export default function AgentsPage() {
           <div className="flex items-center gap-4">
             <Link href={`/${locale}/dashboard`} className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.dashboard}</Link>
             <LanguageSwitcher locale={locale} />
-            <span className="text-sm text-gray-600 hidden sm:inline">{user.email}</span>
+            <span className="text-sm text-gray-600 hidden sm:flex items-center gap-1.5">{user.email} <UserPlanBadge plan={planInfo.plan} /></span>
             <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
           </div>
         </div>
@@ -215,7 +217,7 @@ export default function AgentsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold">{ta.title}</h1>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
-            <Link href={`/${locale}/dashboard`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
+            <Link href={`/${locale}/dashboard/chat`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
             <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.agents}</span>
             <Link href={`/${locale}/dashboard/reports`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.reports}</Link>
             <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
@@ -116,11 +117,21 @@ export default function Home() {
   const tc = dict.common;
 
   const [user, setUser] = useState<{ name?: string; picture?: string; email?: string } | null>(null);
+  const [platformStats, setPlatformStats] = useState<{
+    today: { total_tokens: number; request_count: number };
+    users: number;
+    nextResetUtc: string;
+    user?: { todayTokens: number; dailyTokenLimit: number; remainingTokens: number | null; plan: string; unlimited: boolean };
+  } | null>(null);
 
   useEffect(() => {
     fetch("/auth/profile")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => { if (data?.email || data?.name) setUser(data); })
+      .catch(() => {});
+    fetch("/api/status")
+      .then((res) => res.json())
+      .then((data) => setPlatformStats(data))
       .catch(() => {});
   }, []);
 
@@ -141,7 +152,7 @@ export default function Home() {
   ];
 
   const pricingPlans = [
-    { name: t.planStarter, price: t.planStarterPrice, period: "", description: t.planStarterDesc, features: [t.feat2Agents, t.feat100Emails, t.feat1Project, t.featFreeModels, t.featBYOK, t.featCommunity, t.featBasicTemplates], cta: t.planComingSoon, highlight: false, plan: "starter", disabled: true, minCommitment: false },
+    { name: t.planStarter, price: t.planStarterPrice, period: "", description: t.planStarterDesc, features: [t.feat2Agents, t.feat100Emails, t.feat1Project, t.featFreeModels, t.featBYOK, t.featCommunity, t.featBasicTemplates], cta: t.ctaStarterFree, highlight: false, plan: "starter", disabled: false, minCommitment: false },
     { name: t.planGrowth, price: t.planGrowthPrice, period: t.perMonth, description: t.planGrowthDesc, features: [t.feat10Agents, t.feat2000Emails, t.feat5Projects, t.featCrm, t.featSeoContent, t.featSocialAuto, t.featPriority], cta: t.ctaStartTrial, highlight: true, plan: "growth", disabled: false, minCommitment: true },
     { name: t.planScale, price: t.planScalePrice, period: t.perMonth, description: t.planScaleDesc, features: [t.featUnlimitedAgents, t.feat10000Emails, t.featUnlimitedProjects, t.featCustomAgent, t.featMultiChannel, t.featAdvAnalytics, t.featDedicated, t.featWhiteLabel], cta: t.ctaGetStarted, highlight: false, plan: "scale", disabled: false, minCommitment: true },
     { name: t.planEnterprise, price: t.planEnterprisePrice, period: "", description: t.planEnterpriseDesc, features: [t.featEverythingScale, t.featDedicatedInfra, t.featCustomTraining, t.featSla, t.featSso, t.featOnPrem, t.featCustomApi, t.featAccountManager, t.featVolumeEmail], cta: t.ctaContactSales, highlight: false, plan: "enterprise", disabled: false, minCommitment: true },
@@ -192,7 +203,7 @@ export default function Home() {
                   <a href="/auth/logout" className="text-xs text-gray-400 hover:text-red-500 transition-colors">{tc.logOut}</a>
                 </div>
               ) : (
-                <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary-dark transition-colors">{t.getStarted}</a>
+                <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-primary text-white px-5 py-2 rounded-lg hover:bg-primary-dark transition-colors">{t.getStarted}</a>
               )}
             </nav>
             {/* Mobile nav */}
@@ -201,7 +212,7 @@ export default function Home() {
               {user ? (
                 <a href={`/${locale}/dashboard`} className="text-sm text-primary font-medium">{tc.dashboard}</a>
               ) : (
-                <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-primary text-white px-4 py-2 rounded-lg text-sm">{t.getStarted}</a>
+                <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-primary text-white px-4 py-2 rounded-lg text-sm">{t.getStarted}</a>
               )}
             </div>
           </div>
@@ -218,7 +229,7 @@ export default function Home() {
             </h1>
             <p className="text-xl text-gray-300 mb-10 max-w-2xl mx-auto leading-relaxed">{t.heroDescription}</p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a href={`/auth/login?returnTo=/${locale}/dashboard/agents`} className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.startFree}</a>
+              <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.startFree}</a>
               <a href="#how-it-works" className="border border-gray-500 hover:border-white text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.seeHowItWorks}</a>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 pt-12 border-t border-gray-700 max-w-3xl mx-auto">
@@ -308,6 +319,57 @@ export default function Home() {
           </div>
         </section>
 
+        {/* Live Platform Stats + User Quota */}
+        {platformStats && (
+          <section className="py-8 bg-white border-b border-gray-100">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10 text-center">
+                <div>
+                  <p className="text-2xl font-bold">{Number(platformStats.today.total_tokens) >= 1_000_000 ? `${(Number(platformStats.today.total_tokens) / 1_000_000).toFixed(1)}M` : Number(platformStats.today.total_tokens) >= 1_000 ? `${(Number(platformStats.today.total_tokens) / 1_000).toFixed(1)}K` : String(platformStats.today.total_tokens)}</p>
+                  <p className="text-xs text-gray-500">{t.statTokensToday}</p>
+                </div>
+                <div className="hidden sm:block w-px h-8 bg-gray-200" />
+                <div>
+                  <p className="text-2xl font-bold">{platformStats.users}</p>
+                  <p className="text-xs text-gray-500">{t.statUsers}</p>
+                </div>
+                {platformStats.user && !platformStats.user.unlimited && (
+                  <>
+                    <div className="hidden sm:block w-px h-8 bg-gray-200" />
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 bg-gray-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${
+                              platformStats.user.todayTokens / platformStats.user.dailyTokenLimit > 0.9 ? "bg-red-500" :
+                              platformStats.user.todayTokens / platformStats.user.dailyTokenLimit > 0.7 ? "bg-yellow-500" : "bg-green-500"
+                            }`}
+                            style={{ width: `${Math.min(100, (platformStats.user.todayTokens / platformStats.user.dailyTokenLimit) * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-sm font-bold">
+                          {platformStats.user.remainingTokens !== null
+                            ? (platformStats.user.remainingTokens >= 1_000_000
+                              ? `${(platformStats.user.remainingTokens / 1_000_000).toFixed(1)}M`
+                              : platformStats.user.remainingTokens >= 1_000
+                              ? `${(platformStats.user.remainingTokens / 1_000).toFixed(0)}K`
+                              : String(platformStats.user.remainingTokens))
+                            : "0"}
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500">{t.statFreeRemaining}</p>
+                    </div>
+                  </>
+                )}
+                <div className="hidden sm:block w-px h-8 bg-gray-200" />
+                <Link href={`/${locale}/status`} className="text-xs text-red-600 hover:text-red-700 font-medium">
+                  {t.statViewStatus} &rarr;
+                </Link>
+              </div>
+            </div>
+          </section>
+        )}
+
         {/* Pricing */}
         <section id="pricing" className="py-20 bg-gray-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -345,13 +407,13 @@ export default function Home() {
                       if (plan.plan === "enterprise") {
                         window.location.href = locale === "en" ? "mailto:jay.lin@jytech.us?subject=AutoClaw Enterprise Plan Inquiry" : "tel:+8617318011997";
                       } else if (plan.plan === "starter") {
-                        window.location.href = `/auth/login?returnTo=/${locale}/dashboard/agents`;
+                        window.location.href = `/auth/login?returnTo=/${locale}/dashboard/reports`;
                       } else {
                         try {
                           const res = await fetch("/api/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan: plan.plan }) });
                           const data = await res.json();
                           if (data.url) window.location.href = data.url;
-                        } catch { window.location.href = `/auth/login?returnTo=/${locale}/dashboard/agents`; }
+                        } catch { window.location.href = `/auth/login?returnTo=/${locale}/dashboard/reports`; }
                       }
                     }}
                     className={`block w-full text-center py-3 rounded-lg font-medium transition-colors ${plan.disabled ? "bg-gray-300 text-gray-500 cursor-not-allowed" : plan.highlight ? "bg-white text-primary hover:bg-red-50 cursor-pointer" : "bg-primary text-white hover:bg-primary-dark cursor-pointer"}`}

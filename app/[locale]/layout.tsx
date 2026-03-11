@@ -5,6 +5,7 @@ import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
 import { notFound } from "next/navigation";
 import { isValidLocale, type Locale } from "@/lib/i18n";
+import WeChatGuard from "@/components/WeChatGuard";
 import "../globals.css";
 
 const geistSans = Geist({
@@ -57,6 +58,7 @@ export default async function LocaleLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <WeChatGuard />
         <Auth0Provider>{children}</Auth0Provider>
         <Analytics />
       </body>

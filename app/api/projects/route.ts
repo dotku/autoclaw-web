@@ -222,7 +222,7 @@ export async function GET(req: NextRequest) {
   const emailDomain = email.split("@")[1] || "";
   const projects = isAdmin
     ? await sql`SELECT id, name, website, description, ga_property_id, domain, org_id, created_at FROM projects ORDER BY created_at DESC`
-    : await sql`SELECT DISTINCT ON (id) id, name, website, description, ga_property_id, domain, org_id, created_at FROM projects WHERE user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}) OR org_id IN (SELECT org_id FROM organization_members WHERE user_id = ${userId}) ORDER BY id, created_at DESC`;
+    : await sql`SELECT id, name, website, description, ga_property_id, domain, org_id, created_at FROM projects WHERE user_id = ${userId} OR id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}) OR org_id IN (SELECT org_id FROM organization_members WHERE user_id = ${userId}) ORDER BY created_at DESC`;
   const projectIds = projects.map((p) => p.id);
   const totalAgents = isAdmin
     ? await sql`SELECT COUNT(*)::int as count FROM agent_assignments`
@@ -293,7 +293,7 @@ export async function POST(req: NextRequest) {
     // Verify project ownership (admin can access all)
     const proj = isAdmin
       ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
-      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
@@ -323,7 +323,7 @@ export async function POST(req: NextRequest) {
     // Verify ownership (admin can access all)
     const agent = isAdmin
       ? await sql`SELECT aa.id FROM agent_assignments aa WHERE aa.id = ${agent_id}`
-      : await sql`SELECT aa.id FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
+      : await sql`SELECT aa.id FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR p.id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -337,7 +337,7 @@ export async function POST(req: NextRequest) {
     const { agent_id, blocker_index, value } = body;
     const agent = isAdmin
       ? await sql`SELECT aa.id, aa.config FROM agent_assignments aa WHERE aa.id = ${agent_id}`
-      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
+      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR p.id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -371,7 +371,7 @@ export async function POST(req: NextRequest) {
     const { agent_id, config: newConfig } = body;
     const agent = isAdmin
       ? await sql`SELECT aa.id, aa.config FROM agent_assignments aa WHERE aa.id = ${agent_id}`
-      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
+      : await sql`SELECT aa.id, aa.config FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.id = ${agent_id} AND (p.user_id = ${userId} OR p.id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (p.domain IS NOT NULL AND p.domain != '' AND p.domain = ${emailDomain}))`;
     if (agent.length === 0) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
@@ -384,16 +384,16 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "update_project") {
-    const { project_id, website, ga_property_id, description, domain } = body;
+    const { project_id, name, website, ga_property_id, description, domain } = body;
     const proj = isAdmin
       ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
-      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
-    await sql`UPDATE projects SET website = ${website ?? ""}, ga_property_id = ${ga_property_id ?? null}, description = ${description ?? ""}, domain = ${domain ?? null} WHERE id = ${project_id}`;
-    logAudit({ userId, userEmail: email, action: "project.update", resourceType: "project", resourceId: project_id, details: { website, ga_property_id }, ipAddress: getIp(req) });
-    sendWebhook("project.updated", { project_id, website, ga_property_id, description, domain, user_email: email });
+    await sql`UPDATE projects SET name = COALESCE(${name ?? null}, name), website = ${website ?? ""}, ga_property_id = ${ga_property_id ?? null}, description = ${description ?? ""}, domain = ${domain ?? null} WHERE id = ${project_id}`;
+    logAudit({ userId, userEmail: email, action: "project.update", resourceType: "project", resourceId: project_id, details: { name, website, ga_property_id }, ipAddress: getIp(req) });
+    sendWebhook("project.updated", { project_id, name, website, ga_property_id, description, domain, user_email: email });
     return NextResponse.json({ success: true });
   }
 
@@ -401,7 +401,7 @@ export async function POST(req: NextRequest) {
     const { project_id } = body;
     const proj = isAdmin
       ? await sql`SELECT id FROM projects WHERE id = ${project_id}`
-      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
+      : await sql`SELECT id FROM projects WHERE id = ${project_id} AND (user_id = ${userId} OR id IN (SELECT project_id FROM project_members WHERE user_id = ${userId}) OR (domain IS NOT NULL AND domain != '' AND domain = ${emailDomain}))`;
     if (proj.length === 0) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }

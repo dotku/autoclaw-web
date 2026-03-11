@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from "@auth0/nextjs-auth0/client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import UserPlanBadge from "@/components/UserPlanBadge";
 
 interface AgentReport {
   id: string;
@@ -30,6 +31,8 @@ interface DailyTraffic {
 
 interface ProjectTraffic {
   project: string;
+  status?: "ok" | "no_data" | "error";
+  error?: string;
   data: DailyTraffic[];
 }
 
@@ -65,15 +68,17 @@ interface MetricsSummary {
 const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 
 function CombinedTrafficChart({ projects, locale, colorMap }: { projects: ProjectTraffic[]; locale: string; colorMap?: Record<string, string> }) {
+  const svgRef = useRef<SVGSVGElement>(null);
+  const [hoveredProject, setHoveredProject] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; project: string; date: string; val: number } | null>(null);
+
   if (projects.length === 0) return null;
 
-  // Build a unified date axis from all projects
   const allDates = new Set<string>();
   for (const p of projects) for (const d of p.data) allDates.add(d.date);
   const dates = Array.from(allDates).sort();
   if (dates.length === 0) return null;
 
-  // Build lookup per project: date → pageViews
   const projectLines = projects.map((p, idx) => {
     const lookup: Record<string, number> = {};
     for (const d of p.data) lookup[d.date] = d.pageViews;
@@ -98,8 +103,28 @@ function CombinedTrafficChart({ projects, locale, colorMap }: { projects: Projec
   const step = Math.max(1, Math.floor(dates.length / 6));
   const xLabelIndices = dates.map((_, i) => i).filter((i) => i % step === 0 || i === dates.length - 1);
 
-  const pvLabel = locale === "zh" ? "页面浏览" : "Page Views";
-  const chartTitle = locale === "zh" ? "每日流量趋势（近30天）" : "Daily Traffic Trend (Last 30 Days)";
+  const cDict = getDictionary((locale || "en") as Locale).reportsPage;
+  const pvLabel = cDict.pageViews;
+  const chartTitle = cDict.dailyTrafficTrend;
+
+  const handleDotHover = (e: React.MouseEvent<SVGCircleElement>, project: string, date: string, val: number) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setTooltip({ x, y, project, date, val });
+    setHoveredProject(project);
+  };
+
+  const handleLineHover = (project: string) => {
+    setHoveredProject(project);
+  };
+
+  const handleChartLeave = () => {
+    setTooltip(null);
+    setHoveredProject(null);
+  };
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5">
@@ -107,15 +132,21 @@ function CombinedTrafficChart({ projects, locale, colorMap }: { projects: Projec
         <h3 className="font-semibold text-sm">{chartTitle}</h3>
         <div className="flex flex-wrap gap-3">
           {projectLines.map((pl) => (
-            <div key={pl.name} className="flex items-center gap-1.5">
+            <div
+              key={pl.name}
+              className="flex items-center gap-1.5 cursor-pointer transition-opacity"
+              style={{ opacity: hoveredProject && hoveredProject !== pl.name ? 0.35 : 1 }}
+              onMouseEnter={() => setHoveredProject(pl.name)}
+              onMouseLeave={() => setHoveredProject(null)}
+            >
               <span className="inline-block w-3 h-[3px] rounded" style={{ backgroundColor: pl.color }} />
               <span className="text-xs text-gray-500">{pl.name}</span>
             </div>
           ))}
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[500px]" style={{ maxHeight: 240 }}>
+      <div className="overflow-x-auto relative" onMouseLeave={handleChartLeave}>
+        <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} className="w-full min-w-[500px]" style={{ maxHeight: 240 }}>
           <defs>
             {projectLines.map((pl) => (
               <linearGradient key={pl.name} id={`grad_${pl.name.replace(/\s/g, "_")}`} x1="0" y1="0" x2="0" y2="1">
@@ -136,18 +167,36 @@ function CombinedTrafficChart({ projects, locale, colorMap }: { projects: Projec
           })}
           {/* Per-project area + line + dots */}
           {projectLines.map((pl) => {
+            const isHovered = hoveredProject === pl.name;
+            const isDimmed = hoveredProject !== null && !isHovered;
             const pts = dates.map((d, i) => ({ x: xFor(i), y: yFor(pl.lookup[d] || 0), val: pl.lookup[d] || 0, date: d }));
             const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
             const areaPath = `${linePath} L${pts[pts.length - 1].x},${yFor(0)} L${pts[0].x},${yFor(0)} Z`;
             const gradId = `grad_${pl.name.replace(/\s/g, "_")}`;
             return (
-              <g key={pl.name}>
+              <g
+                key={pl.name}
+                style={{ opacity: isDimmed ? 0.15 : 1, transition: "opacity 0.2s" }}
+                onMouseEnter={() => handleLineHover(pl.name)}
+                onMouseLeave={() => { setHoveredProject(null); setTooltip(null); }}
+              >
                 <path d={areaPath} fill={`url(#${gradId})`} />
-                <path d={linePath} fill="none" stroke={pl.color} strokeWidth={2} />
+                {/* Invisible wider stroke for easier hover targeting */}
+                <path d={linePath} fill="none" stroke="transparent" strokeWidth={12} style={{ cursor: "pointer" }} />
+                <path d={linePath} fill="none" stroke={pl.color} strokeWidth={isHovered ? 3 : 2} style={{ transition: "stroke-width 0.2s" }} />
                 {pts.map((p, i) => (
-                  <circle key={i} cx={p.x} cy={p.y} r={2} fill={pl.color} stroke="white" strokeWidth={0.8}>
-                    <title>{`${pl.name} · ${p.date}: ${p.val} ${pvLabel}`}</title>
-                  </circle>
+                  <circle
+                    key={i}
+                    cx={p.x}
+                    cy={p.y}
+                    r={isHovered ? 4 : 2}
+                    fill={pl.color}
+                    stroke="white"
+                    strokeWidth={isHovered ? 1.5 : 0.8}
+                    style={{ cursor: "pointer", transition: "r 0.2s" }}
+                    onMouseEnter={(e) => handleDotHover(e, pl.name, p.date, p.val)}
+                    onMouseLeave={() => setTooltip(null)}
+                  />
                 ))}
               </g>
             );
@@ -157,6 +206,27 @@ function CombinedTrafficChart({ projects, locale, colorMap }: { projects: Projec
             <text key={dates[i]} x={xFor(i)} y={H - 5} textAnchor="middle" fontSize={9} fill="#9ca3af">{dates[i].slice(5)}</text>
           ))}
         </svg>
+        {/* Custom tooltip */}
+        {tooltip && (
+          <div
+            className="absolute pointer-events-none z-10 bg-gray-800 text-white text-xs rounded-lg px-3 py-2 shadow-lg"
+            style={{
+              left: tooltip.x,
+              top: tooltip.y - 50,
+              transform: "translateX(-50%)",
+              whiteSpace: "nowrap",
+            }}
+          >
+            <div className="font-semibold flex items-center gap-1.5">
+              <span
+                className="inline-block w-2 h-2 rounded-full"
+                style={{ backgroundColor: projectLines.find((pl) => pl.name === tooltip.project)?.color }}
+              />
+              {tooltip.project}
+            </div>
+            <div className="text-gray-300 mt-0.5">{tooltip.date}: <span className="text-white font-medium">{tooltip.val.toLocaleString()}</span> {pvLabel}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -187,9 +257,10 @@ function TokenUsageChart({ data, locale }: { data: TokenUsageEntry[]; locale: st
   const xLabelIndices = dates.map((_, i) => i).filter((i) => i % step === 0 || i === dates.length - 1);
   const fmtNum = (n: number) => n >= 1000000 ? (n / 1000000).toFixed(1) + "M" : n >= 1000 ? (n / 1000).toFixed(0) + "K" : String(n);
 
-  const chartTitle = locale === "zh" ? "Token 消耗趋势（近30天）" : "Token Usage Trend (Last 30 Days)";
-  const promptLabel = locale === "zh" ? "输入 Token" : "Prompt Tokens";
-  const completionLabel = locale === "zh" ? "输出 Token" : "Completion Tokens";
+  const tDict = getDictionary((locale || "en") as Locale).reportsPage;
+  const chartTitle = tDict.tokenUsageTrend;
+  const promptLabel = tDict.promptTokens;
+  const completionLabel = tDict.completionTokens;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-4 sm:p-5">
@@ -307,6 +378,7 @@ export default function ReportsPage() {
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [tokenUsage, setTokenUsage] = useState<TokenUsageEntry[]>([]);
   const [tokenSummary, setTokenSummary] = useState({ totalTokens: 0, promptTokens: 0, completionTokens: 0 });
+  const [userPlan, setUserPlan] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -316,6 +388,7 @@ export default function ReportsPage() {
       .then((r) => r.json())
       .then((data) => {
         setReports(data.reports || []);
+        if (data.plan) setUserPlan(data.plan);
         if (data.brevoStats) setBrevoStats(data.brevoStats);
         if (data.brevoCampaigns) setBrevoCampaigns(data.brevoCampaigns);
         if (data.gaStats) setGaStats(data.gaStats);
@@ -386,7 +459,7 @@ export default function ReportsPage() {
           </Link>
           <div className="flex items-center gap-4">
             <LanguageSwitcher locale={locale} />
-            <span className="text-sm text-gray-600 hidden sm:inline">{user.email}</span>
+            <span className="text-sm text-gray-600 hidden sm:flex items-center gap-1.5">{user.email} <UserPlanBadge plan={userPlan} /></span>
             <a href="/auth/logout" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">{tc.logOut}</a>
           </div>
         </div>
@@ -396,7 +469,7 @@ export default function ReportsPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
           <h1 className="text-2xl font-bold">{tr.title}</h1>
           <div className="flex gap-1 bg-gray-100 rounded-lg p-1 overflow-x-auto">
-            <Link href={`/${locale}/dashboard`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
+            <Link href={`/${locale}/dashboard/chat`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.chat}</Link>
             <Link href={`/${locale}/dashboard/agents`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.agents}</Link>
             <span className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium bg-white text-gray-900 shadow-sm whitespace-nowrap">{tc.reports}</span>
             <Link href={`/${locale}/dashboard/billing`} className="px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors whitespace-nowrap">{tc.billing}</Link>
@@ -425,7 +498,7 @@ export default function ReportsPage() {
             {gaProjects.length > 0 && (
               <section className="mb-8">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                  <h2 className="text-lg font-semibold">{locale === "zh" ? "网站流量" : "Website Traffic"}</h2>
+                  <h2 className="text-lg font-semibold">{tr.websiteTraffic}</h2>
                   <div className="flex flex-wrap gap-2">
                     <button
                       onClick={() => {
@@ -441,11 +514,12 @@ export default function ReportsPage() {
                           : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
                       }`}
                     >
-                      {locale === "zh" ? "全部" : "All"}
+                      {tr.all}
                     </button>
                     {gaProjects.map((p, idx) => {
                       const color = CHART_COLORS[idx % CHART_COLORS.length];
                       const isSelected = selectedProjects.has(p.project);
+                      const hasIssue = p.status === "error" || p.status === "no_data";
                       return (
                         <button
                           key={p.project}
@@ -462,36 +536,57 @@ export default function ReportsPage() {
                             isSelected
                               ? "text-white border-transparent"
                               : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
-                          }`}
+                          } ${hasIssue ? "opacity-70" : ""}`}
                           style={isSelected ? { backgroundColor: color, borderColor: color } : {}}
                         >
-                          {p.project}
+                          {p.project}{p.status === "error" ? " !" : p.status === "no_data" ? " *" : ""}
                         </button>
                       );
                     })}
                   </div>
                 </div>
-                <CombinedTrafficChart
-                  projects={gaProjects.filter((p) => selectedProjects.has(p.project))}
-                  locale={locale}
-                  colorMap={Object.fromEntries(gaProjects.map((p, i) => [p.project, CHART_COLORS[i % CHART_COLORS.length]]))}
-                />
+
+                {/* Show per-project status messages for error/no_data */}
+                {gaProjects.some((p) => p.status === "error" || p.status === "no_data") && (
+                  <div className="space-y-2 mb-4">
+                    {gaProjects.filter((p) => p.status === "error").map((p) => (
+                      <div key={p.project} className="flex items-center gap-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg px-3 py-2">
+                        <span className="font-medium">{p.project}:</span>
+                        <span>{p.error || tr.trafficError}</span>
+                      </div>
+                    ))}
+                    {gaProjects.filter((p) => p.status === "no_data").map((p) => (
+                      <div key={p.project} className="flex items-center gap-2 text-sm bg-gray-50 text-gray-500 border border-gray-200 rounded-lg px-3 py-2">
+                        <span className="font-medium">{p.project}:</span>
+                        <span>{tr.trafficNoData}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {gaProjects.some((p) => selectedProjects.has(p.project) && p.status === "ok") && (
+                  <CombinedTrafficChart
+                    projects={gaProjects.filter((p) => selectedProjects.has(p.project) && p.status === "ok")}
+                    locale={locale}
+                    colorMap={Object.fromEntries(gaProjects.map((p, i) => [p.project, CHART_COLORS[i % CHART_COLORS.length]]))}
+                  />
+                )}
               </section>
             )}
 
             {tokenUsage.length > 0 && (
               <section className="mb-8">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                  <h2 className="text-lg font-semibold">{locale === "zh" ? "Token 消耗" : "Token Usage"}</h2>
+                  <h2 className="text-lg font-semibold">{tr.tokenUsage}</h2>
                   <div className="flex gap-3 text-sm">
                     <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full font-medium">
-                      {locale === "zh" ? "总计" : "Total"}: {tokenSummary.totalTokens.toLocaleString()}
+                      {tr.totalTokens}: {tokenSummary.totalTokens.toLocaleString()}
                     </div>
                     <div className="bg-purple-50 text-purple-700 px-3 py-1 rounded-full font-medium">
-                      {locale === "zh" ? "输入" : "Prompt"}: {tokenSummary.promptTokens.toLocaleString()}
+                      {tr.promptLabel}: {tokenSummary.promptTokens.toLocaleString()}
                     </div>
                     <div className="bg-violet-50 text-violet-700 px-3 py-1 rounded-full font-medium">
-                      {locale === "zh" ? "输出" : "Completion"}: {tokenSummary.completionTokens.toLocaleString()}
+                      {tr.completionLabel}: {tokenSummary.completionTokens.toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -507,7 +602,7 @@ export default function ReportsPage() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
-                          <th className="text-left px-4 py-3 font-medium text-gray-600">{locale === "zh" ? "活动名称" : "Campaign"}</th>
+                          <th className="text-left px-4 py-3 font-medium text-gray-600">{tr.campaignName}</th>
                           <th className="text-left px-3 py-3 font-medium text-gray-600">{tr.project}</th>
                           <th className="text-center px-3 py-3 font-medium text-gray-600">{tr.campaignStatus}</th>
                           <th className="text-right px-3 py-3 font-medium text-gray-600">{tr.campaignSent}</th>
@@ -529,9 +624,9 @@ export default function ReportsPage() {
                             suspended: "bg-yellow-100 text-yellow-700",
                             archive: "bg-gray-100 text-gray-500",
                           };
-                          const statusLabel = c.status === "sent" ? (locale === "zh" ? "已发送" : "Sent")
-                            : c.status === "draft" ? (locale === "zh" ? "草稿" : "Draft")
-                            : c.status === "queued" ? (locale === "zh" ? "排队中" : "Queued")
+                          const statusLabel = c.status === "sent" ? tr.statusSent
+                            : c.status === "draft" ? tr.statusDraft
+                            : c.status === "queued" ? tr.statusQueued
                             : c.status;
                           return (
                             <tr key={c.id} className="border-b border-gray-100 hover:bg-gray-50">
@@ -546,7 +641,7 @@ export default function ReportsPage() {
                               <td className="px-3 py-3 text-right tabular-nums">{c.clicked.toLocaleString()}</td>
                               <td className="px-3 py-3 text-right tabular-nums text-blue-600 font-medium">{clickRate}%</td>
                               <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                                {c.sentDate ? new Date(c.sentDate).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US") : "-"}
+                                {c.sentDate ? new Date(c.sentDate).toLocaleDateString(locale === "zh" ? "zh-CN" : locale === "zh-TW" ? "zh-TW" : locale === "fr" ? "fr-FR" : "en-US") : "-"}
                               </td>
                             </tr>
                           );
@@ -588,7 +683,7 @@ export default function ReportsPage() {
                         ))}
                       </div>
                       <p className="text-gray-400 text-xs">
-                        {CATEGORY_LABELS[locale]?.[report.period] || CATEGORY_LABELS.en[report.period] || report.period} &middot; {tr.lastRun} {new Date(report.last_run).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}
+                        {CATEGORY_LABELS[locale]?.[report.period] || CATEGORY_LABELS.en[report.period] || report.period} &middot; {tr.lastRun} {new Date(report.last_run).toLocaleString(locale === "zh" ? "zh-CN" : locale === "zh-TW" ? "zh-TW" : locale === "fr" ? "fr-FR" : "en-US")}
                       </p>
                     </div>
                   ))}

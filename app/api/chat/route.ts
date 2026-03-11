@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
-import { chatWithAI } from "@/lib/ai";
+import { chatWithAI, ByokKeys } from "@/lib/ai";
+import { decrypt, encrypt } from "@/lib/crypto";
 import { prospectDomain, prospectMultipleDomains } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
@@ -111,14 +112,14 @@ function matchAgentTypes(msg: string): string[] {
 }
 
 const PLAN_AGENT_LIMITS: Record<string, number> = {
-  starter: 2,
-  growth: 10,
+  starter: 999,
+  growth: 999,
   scale: 999,
   enterprise: 999,
 };
 
 function getAgentLimit(plan: string): number {
-  return PLAN_AGENT_LIMITS[plan] || 2;
+  return PLAN_AGENT_LIMITS[plan] || 999;
 }
 
 function extractProjectInfo(msg: string): { name: string; website: string; description: string } | null {
@@ -199,7 +200,7 @@ export async function POST(req: NextRequest) {
 
   const sql = getDb();
   const email = session.user.email as string;
-  const { message, project_id } = await req.json();
+  const { message, project_id, model: selectedModel } = await req.json();
 
   if (!message) {
     return NextResponse.json({ error: "Message required" }, { status: 400 });
@@ -214,8 +215,73 @@ export async function POST(req: NextRequest) {
   const userPlan = (users[0].plan as string) || "starter";
   const agentLimit = getAgentLimit(userPlan);
 
-  // Save user message
-  await sql`INSERT INTO chat_messages (user_id, project_id, role, content) VALUES (${userId}, ${project_id || null}, 'user', ${message})`;
+  // Fetch user BYOK AI keys
+  const byokRows = await sql`
+    SELECT service, api_key FROM user_api_keys
+    WHERE user_id = ${userId} AND service IN ('openai', 'anthropic', 'google')
+  `;
+  const byok: ByokKeys = {};
+  for (const row of byokRows) {
+    try {
+      const key = decrypt(row.api_key as string);
+      if (row.service === "openai") byok.openai = key;
+      else if (row.service === "anthropic") byok.anthropic = key;
+      else if (row.service === "google") byok.google = key;
+    } catch {
+      // Skip keys that fail to decrypt
+    }
+  }
+
+  // Daily spending limit for Starter plan ($1/day)
+  const DAILY_LIMIT_CENTS: Record<string, number> = {
+    starter: 100,   // $1.00
+    growth: 5000,    // $50.00
+    scale: 50000,    // $500.00
+    enterprise: 0,   // unlimited
+  };
+  const dailyLimitCents = DAILY_LIMIT_CENTS[userPlan] || 100;
+
+  if (dailyLimitCents > 0) {
+    // Cost per 1M tokens (in cents) by provider — approximate
+    const COST_PER_M: Record<string, { input: number; output: number }> = {
+      cerebras: { input: 0, output: 0 },          // Cerebras free tier
+      nvidia: { input: 0, output: 0 },            // NVIDIA free tier
+      google: { input: 10, output: 40 },           // Gemini Flash
+      openai: { input: 15, output: 60 },           // GPT-4o-mini (BYOK)
+      anthropic: { input: 300, output: 1500 },     // Claude Sonnet (BYOK)
+    };
+
+    const todayUsage = await sql`
+      SELECT provider, SUM(prompt_tokens)::int as prompt_tokens, SUM(completion_tokens)::int as completion_tokens
+      FROM token_usage
+      WHERE user_id = ${userId} AND source = 'chat' AND created_at::date = CURRENT_DATE
+      GROUP BY provider
+    `;
+
+    let totalSpendCents = 0;
+    for (const row of todayUsage) {
+      const cost = COST_PER_M[row.provider as string] || COST_PER_M.google;
+      totalSpendCents += ((row.prompt_tokens as number) * cost.input + (row.completion_tokens as number) * cost.output) / 1_000_000;
+    }
+
+    if (totalSpendCents >= dailyLimitCents) {
+      const reply = userPlan === "starter"
+        ? `You've reached your **$1.00 daily chat limit** on the Starter plan. Upgrade to Growth ($49/mo) for a higher limit, or bring your own AI key (BYOK) in Settings to use your own quota.`
+        : `You've reached your daily chat limit. Please try again tomorrow or upgrade your plan.`;
+      await sql`INSERT INTO chat_messages (user_id, project_id, role, content, agent_type) VALUES (${userId}, ${project_id || null}, 'assistant', ${reply}, 'autoclaw')`;
+      return NextResponse.json({ reply });
+    }
+  }
+
+  // Save user message (redact API keys from stored content)
+  const redactedMessage = message.replace(
+    /(?:add|set)\s+(?:my\s+)?key\s+(\S+)\s+(?:to|for)\s+/i,
+    (match: string, key: string) => match.replace(key, key.slice(0, 4) + "***")
+  ).replace(
+    /(?:add|set)\s+(?:my\s+)?\S+\s+key\s+(\S+)/i,
+    (match: string, key: string) => match.replace(key, key.slice(0, 4) + "***")
+  );
+  await sql`INSERT INTO chat_messages (user_id, project_id, role, content) VALUES (${userId}, ${project_id || null}, 'user', ${redactedMessage})`;
 
   // Load context
   const projects = await sql`SELECT id, name, website, description FROM projects WHERE user_id = ${userId}`;
@@ -581,6 +647,57 @@ export async function POST(req: NextRequest) {
       }
     }
   }
+  // === ACTION: Add BYOK key via chat ===
+  else if (
+    lowerMsg.includes("add my key") || lowerMsg.includes("add key") ||
+    lowerMsg.includes("set my key") || lowerMsg.includes("set key") ||
+    lowerMsg.includes("添加密钥") || lowerMsg.includes("设置密钥")
+  ) {
+    const BYOK_SERVICES: Record<string, string> = {
+      clawhub: "clawhub",
+      openai: "openai",
+      anthropic: "anthropic",
+      google: "google",
+      brevo: "brevo",
+      apollo: "apollo",
+      hunter: "hunter",
+      vercel: "vercel",
+      "twitter_api_key": "twitter_api_key",
+      "twitter_api_secret": "twitter_api_secret",
+      "twitter_access_token": "twitter_access_token",
+      "twitter_access_token_secret": "twitter_access_token_secret",
+    };
+
+    // Match: "add my key sk_xxx to openai" or "add key clh_xxx to clawhub"
+    const keyMatch = message.match(/(?:add|set)\s+(?:my\s+)?key\s+(\S+)\s+(?:to|for)\s+(\S+)/i);
+    // Also match: "add my openai key sk_xxx"
+    const altMatch = !keyMatch ? message.match(/(?:add|set)\s+(?:my\s+)?(\S+)\s+key\s+(\S+)/i) : null;
+
+    let apiKey: string | null = null;
+    let serviceName: string | null = null;
+
+    if (keyMatch) {
+      apiKey = keyMatch[1];
+      serviceName = keyMatch[2].toLowerCase();
+    } else if (altMatch) {
+      serviceName = altMatch[1].toLowerCase();
+      apiKey = altMatch[2];
+    }
+
+    if (apiKey && serviceName && BYOK_SERVICES[serviceName]) {
+      const service = BYOK_SERVICES[serviceName];
+      const encryptedKey = encrypt(apiKey);
+      await sql`INSERT INTO user_api_keys (user_id, service, api_key)
+        VALUES (${userId}, ${service}, ${encryptedKey})
+        ON CONFLICT (user_id, service) DO UPDATE SET api_key = ${encryptedKey}, updated_at = NOW()`;
+      const maskedKey = apiKey.slice(0, 4) + "..." + apiKey.slice(-4);
+      reply = `Your **${serviceName}** API key (\`${maskedKey}\`) has been saved securely. It's now available for use across your agents and chat.`;
+    } else if (serviceName && !BYOK_SERVICES[serviceName]) {
+      reply = `**${serviceName}** is not a supported BYOK service. Supported services:\n\n${Object.keys(BYOK_SERVICES).map((s) => `- **${s}**`).join("\n")}\n\nExample: "add my key clh_xxx to clawhub"`;
+    } else {
+      reply = `To add an API key, use this format:\n\n\`add my key <your-key> to <service>\`\n\nSupported services: ${Object.keys(BYOK_SERVICES).join(", ")}\n\nExample: "add my key clh_abc123 to clawhub"`;
+    }
+  }
   // === DEFAULT: AI-powered response ===
   else {
     // Try to auto-create project from description if none exist
@@ -626,7 +743,7 @@ Keep responses concise and helpful. Use markdown formatting.`;
       const aiResult = await chatWithAI([
         { role: "system", content: systemPrompt },
         { role: "user", content: message },
-      ]);
+      ], 500, byok, selectedModel);
       reply = aiResult.content;
 
       // Record token usage
