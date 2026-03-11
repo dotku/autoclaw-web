@@ -166,3 +166,15 @@ CREATE TABLE IF NOT EXISTS embedding_usage (
   updated_at TIMESTAMP DEFAULT NOW(),
   UNIQUE(period)
 );
+
+-- User budget settings
+CREATE TABLE IF NOT EXISTS user_budgets (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE UNIQUE,
+  monthly_limit NUMERIC,
+  total_limit NUMERIC,
+  alert_thresholds INTEGER[] DEFAULT '{80,100}',
+  auto_pause BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
