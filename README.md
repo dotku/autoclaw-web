@@ -73,6 +73,24 @@ Open `http://localhost:3000`.
 - `npm run start` - Run production server
 - `npm run lint` - Run ESLint
 
+## Scheduled Jobs
+
+This repository includes GitHub Actions based maintenance scheduling in
+`.github/workflows/cron-maintenance.yml`.
+
+Configured jobs:
+
+- Every 10 minutes: `/api/cron/sync-openclaw`
+- Every 30 minutes: `/api/cron/run-agents`
+- Hourly: `/api/cron/process-embeddings`
+- Daily at 03:00 UTC: `/api/cron/audit-retention`
+- Daily at 03:15 UTC: `/api/cron/key-cleanup`
+
+Required GitHub Actions configuration:
+
+- Repository variable: `AUTOCLAW_BASE_URL`
+- Repository secret: `CRON_SECRET`
+
 ## Repository Structure
 
 - `app/` - UI routes and API route handlers
