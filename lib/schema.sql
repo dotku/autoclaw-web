@@ -167,6 +167,55 @@ CREATE TABLE IF NOT EXISTS embedding_usage (
   UNIQUE(period)
 );
 
+-- Skills catalog
+CREATE TABLE IF NOT EXISTS skills (
+  id SERIAL PRIMARY KEY,
+  key VARCHAR(100) UNIQUE NOT NULL,
+  category VARCHAR(50) NOT NULL,
+  sort_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Per-user skill activation
+CREATE TABLE IF NOT EXISTS user_skills (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  skill_id INTEGER REFERENCES skills(id) ON DELETE CASCADE,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, skill_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_skills_user ON user_skills(user_id);
+
+-- Seed default skills
+INSERT INTO skills (key, category, sort_order) VALUES
+  ('skillColdEmail', 'email', 1),
+  ('skillFollowUp', 'email', 2),
+  ('skillNewsletter', 'email', 3),
+  ('skillEmailTemplate', 'email', 4),
+  ('skillBlogWriter', 'seo', 5),
+  ('skillKeywordResearch', 'seo', 6),
+  ('skillSeoAudit', 'seo', 7),
+  ('skillMetaOptimizer', 'seo', 8),
+  ('skillLinkedIn', 'leads', 9),
+  ('skillWebScraper', 'leads', 10),
+  ('skillEnrichment', 'leads', 11),
+  ('skillCrmSync', 'leads', 12),
+  ('skillTweetComposer', 'social', 13),
+  ('skillContentScheduler', 'social', 14),
+  ('skillSocialListening', 'social', 15),
+  ('skillHashtagResearch', 'social', 16),
+  ('skillTrafficDashboard', 'analytics', 17),
+  ('skillCampaignAnalytics', 'analytics', 18),
+  ('skillConversionTracking', 'analytics', 19),
+  ('skillReportGenerator', 'analytics', 20),
+  ('skillWorkflowBuilder', 'automation', 21),
+  ('skillWebhookTrigger', 'automation', 22),
+  ('skillDataPipeline', 'automation', 23),
+  ('skillTaskScheduler', 'automation', 24)
+ON CONFLICT (key) DO NOTHING;
+
 -- User budget settings
 CREATE TABLE IF NOT EXISTS user_budgets (
   id SERIAL PRIMARY KEY,

@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
+import { decrypt } from "@/lib/crypto";
 
 export const dynamic = "force-dynamic";
 
-const WORKER_URL = process.env.WORKER_URL || "https://autoclaw-worker.dotku.workers.dev";
-const WORKER_AUTH_SECRET = process.env.WORKER_AUTH_SECRET;
+const SYSTEM_WORKER_URL = process.env.WORKER_URL || "https://autoclaw-worker.dotku.workers.dev";
+const SYSTEM_WORKER_SECRET = process.env.WORKER_AUTH_SECRET;
 
 export async function POST(req: NextRequest) {
   const session = await auth0.getSession();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  if (!WORKER_URL || !WORKER_AUTH_SECRET) {
-    return NextResponse.json({ error: "Worker not configured" }, { status: 500 });
   }
 
   const sql = getDb();
@@ -37,17 +34,39 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Agent not found" }, { status: 404 });
   }
 
+  // Resolve worker URL and secret: user BYOK first, then system fallback
+  let workerUrl: string | undefined;
+  let workerSecret: string | undefined;
+
+  // Check user's BYOK worker config first
+  const byokKeys = await sql`
+    SELECT service, api_key FROM user_api_keys
+    WHERE user_id = ${userId} AND service IN ('worker_url', 'worker_secret')
+  `;
+  for (const row of byokKeys) {
+    if (row.service === "worker_url") workerUrl = decrypt(row.api_key);
+    if (row.service === "worker_secret") workerSecret = decrypt(row.api_key);
+  }
+
+  // Fall back to system-level config if user hasn't configured BYOK worker
+  if (!workerUrl) workerUrl = SYSTEM_WORKER_URL;
+  if (!workerSecret) workerSecret = SYSTEM_WORKER_SECRET;
+
+  if (!workerUrl || !workerSecret) {
+    return NextResponse.json({ error: "Worker not configured. Add your Cloudflare Worker URL and Secret in Settings → API Keys." }, { status: 500 });
+  }
+
   const endpoint = action === "run-all" ? "/run-all" : "/execute";
   const body = action === "run-all"
     ? { agent_id }
     : { agent_id, task_index, project_id: agents[0].project_id, user_id: userId };
 
   try {
-    const workerRes = await fetch(`${WORKER_URL}${endpoint}`, {
+    const workerRes = await fetch(`${workerUrl}${endpoint}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${WORKER_AUTH_SECRET}`,
+        Authorization: `Bearer ${workerSecret}`,
       },
       body: JSON.stringify(body),
     });

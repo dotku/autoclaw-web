@@ -150,7 +150,7 @@ export const inviteTeamMemberSchema = z.object({
 });
 
 // ── API Keys (BYOK) ──
-const allowedService = z.enum(["brevo", "apollo", "hunter", "openai", "anthropic", "google", "vercel", "clawhub", "twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret"]);
+const allowedService = z.enum(["brevo", "apollo", "hunter", "openai", "anthropic", "google", "vercel", "clawhub", "twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret", "worker_url", "worker_secret"]);
 
 export const upsertApiKeySchema = z.object({
   action: z.literal("upsert"),

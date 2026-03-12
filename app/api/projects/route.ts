@@ -67,7 +67,7 @@ const AGENT_PLANS: Record<string, Record<string, object>> = {
         { name: "Launch engagement campaign (likes, replies, follows)", status: "pending" },
         { name: "Track follower growth & engagement metrics", status: "pending" },
       ],
-      blockers: ["Need X/Twitter API credentials", "Need LinkedIn page admin access"],
+      blockers: ["Need X/Twitter API credentials configured"],
     },
     product_manager: {
       plan: "Monitor website health, analyze user behavior, track conversion funnels, and identify optimization opportunities.",
@@ -152,7 +152,7 @@ const AGENT_PLANS: Record<string, Record<string, object>> = {
         { name: "\u53d1\u8d77\u4e92\u52a8\u6d3b\u52a8\uff08\u70b9\u8d5e\u3001\u56de\u590d\u3001\u5173\u6ce8\uff09", status: "pending" },
         { name: "\u8ddf\u8e2a\u7c89\u4e1d\u589e\u957f\u548c\u4e92\u52a8\u6307\u6807", status: "pending" },
       ],
-      blockers: ["\u9700\u8981 X/Twitter API \u51ed\u8bc1", "\u9700\u8981 LinkedIn \u9875\u9762\u7ba1\u7406\u5458\u6743\u9650"],
+      blockers: ["\u9700\u8981 X/Twitter API \u51ed\u8bc1"],
     },
     product_manager: {
       plan: "\u76d1\u63a7\u7f51\u7ad9\u5065\u5eb7\uff0c\u5206\u6790\u7528\u6237\u884c\u4e3a\uff0c\u8ddf\u8e2a\u8f6c\u5316\u6f0f\u6597\uff0c\u5e76\u8bc6\u522b\u4f18\u5316\u673a\u4f1a\u3002",
@@ -230,8 +230,14 @@ export async function GET(req: NextRequest) {
       ? await sql`SELECT COUNT(*)::int as count FROM agent_assignments WHERE project_id = ANY(${projectIds})`
       : [{ count: 0 }];
 
+  // Load agent assignments for each project
+  const agents = projectIds.length > 0
+    ? await sql`SELECT aa.id, aa.project_id, aa.agent_type, aa.status, aa.config, p.name as project_name FROM agent_assignments aa JOIN projects p ON aa.project_id = p.id WHERE aa.project_id = ANY(${projectIds}) ORDER BY aa.created_at`
+    : [];
+
   return NextResponse.json({
     projects,
+    agents,
     plan,
     role,
     agentLimit,
@@ -311,7 +317,34 @@ export async function POST(req: NextRequest) {
     }
     const locale = body.locale === "zh" ? "zh" : "en";
     const localePlans = AGENT_PLANS[locale] || AGENT_PLANS.en;
-    const config = localePlans[agent_type] || {};
+    const config: Record<string, unknown> = { ...(localePlans[agent_type] || {}) };
+
+    // Auto-resolve blockers if user already has the required BYOK keys
+    if (config.blockers && Array.isArray(config.blockers) && config.blockers.length > 0) {
+      const userKeys = await sql`SELECT service FROM user_api_keys WHERE user_id = ${userId}`;
+      const keyServices = new Set(userKeys.map((k: Record<string, string>) => k.service));
+
+      // Map blocker patterns to required BYOK services
+      const blockerKeyMap: Record<string, string[]> = {
+        "X/Twitter API": ["twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret"],
+        "Brevo": ["brevo"],
+        "Apollo": ["apollo"],
+        "Hunter": ["hunter"],
+        "OpenAI": ["openai"],
+        "Anthropic": ["anthropic"],
+        "Google": ["google"],
+      };
+
+      config.blockers = (config.blockers as string[]).filter((blocker: string) => {
+        for (const [pattern, requiredKeys] of Object.entries(blockerKeyMap)) {
+          if (blocker.includes(pattern)) {
+            return !requiredKeys.every((k) => keyServices.has(k));
+          }
+        }
+        return true; // keep blockers that don't match any BYOK pattern
+      });
+    }
+
     await sql`INSERT INTO agent_assignments (project_id, agent_type, status, config) VALUES (${project_id}, ${agent_type}, 'active', ${JSON.stringify(config)})`;
     logAudit({ userId, userEmail: email, action: "agent.activate", resourceType: "agent", resourceId: project_id, details: { agent_type }, ipAddress: getIp(req) });
     sendWebhook("agent.activated", { project_id, agent_type, user_email: email, config });

@@ -1231,6 +1231,138 @@ export default function SettingsPage() {
                 </div>
               );
             })()}
+
+            {/* Cloudflare Worker - 2 keys grouped */}
+            {(() => {
+              const workerKeys = [
+                { service: "worker_url" as const, name: ts.byokWorkerUrl, hint: ts.byokWorkerUrlHint },
+                { service: "worker_secret" as const, name: ts.byokWorkerSecret, hint: ts.byokWorkerSecretHint },
+              ];
+              const workerConfigured = workerKeys.filter((k) => apiKeys.some((a) => a.service === k.service));
+              const isEditingWorker = byokEditing === "worker";
+
+              return (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">{ts.byokWorker}</h3>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${workerConfigured.length === 2 ? "bg-green-100 text-green-800" : workerConfigured.length > 0 ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-500"}`}>
+                        {workerConfigured.length === 2 ? ts.byokMasked : workerConfigured.length > 0 ? `${workerConfigured.length}/2` : ts.byokNotSet}
+                      </span>
+                    </div>
+                    {!isEditingWorker && (
+                      <button
+                        onClick={() => {
+                          setByokEditing("worker");
+                          setByokKeyInput("");
+                        }}
+                        className="text-xs text-red-600 hover:text-red-800 transition-colors cursor-pointer"
+                      >
+                        {workerConfigured.length > 0 ? ts.edit : ts.byokSave}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mb-2">{ts.byokWorkerHint}</p>
+
+                  {!isEditingWorker && workerConfigured.length > 0 && (
+                    <div className="space-y-1">
+                      {workerKeys.map((wk) => {
+                        const existing = apiKeys.find((a) => a.service === wk.service);
+                        return existing ? (
+                          <div key={wk.service} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 w-36">{wk.name}:</span>
+                            <span className="text-sm text-gray-600 font-mono">{existing.masked_key}</span>
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+
+                  {isEditingWorker && (
+                    <div className="space-y-2 mt-2">
+                      {workerKeys.map((wk) => {
+                        const existing = apiKeys.find((a) => a.service === wk.service);
+                        return (
+                          <div key={wk.service}>
+                            <label className="text-xs text-gray-500 mb-1 block">{wk.name}</label>
+                            <input
+                              type={wk.service === "worker_url" ? "text" : "password"}
+                              defaultValue=""
+                              placeholder={existing ? "••••••••  (leave blank to keep)" : wk.service === "worker_url" ? "https://my-worker.workers.dev" : ts.byokPlaceholder}
+                              data-worker-key={wk.service}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none font-mono"
+                            />
+                          </div>
+                        );
+                      })}
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={async () => {
+                            setByokSaving(true);
+                            try {
+                              const inputs = document.querySelectorAll<HTMLInputElement>("[data-worker-key]");
+                              let saved = false;
+                              for (const input of inputs) {
+                                const service = input.getAttribute("data-worker-key");
+                                const value = input.value.trim();
+                                if (value && service) {
+                                  const res = await fetch("/api/api-keys", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ action: "upsert", service, api_key: value }),
+                                  });
+                                  if (res.ok) saved = true;
+                                }
+                              }
+                              if (saved) {
+                                setByokMsg(ts.byokSaved);
+                                setByokEditing(null);
+                                const data = await fetch("/api/api-keys").then((r) => r.json());
+                                setApiKeys(data.keys || []);
+                              }
+                            } finally {
+                              setByokSaving(false);
+                              setTimeout(() => setByokMsg(""), 3000);
+                            }
+                          }}
+                          disabled={byokSaving}
+                          className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {byokSaving ? "..." : ts.byokSave}
+                        </button>
+                        <button
+                          onClick={() => setByokEditing(null)}
+                          className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 transition-colors cursor-pointer"
+                        >
+                          {tc.cancel}
+                        </button>
+                        {workerConfigured.length > 0 && (
+                          <button
+                            onClick={async () => {
+                              for (const wk of workerKeys) {
+                                await fetch("/api/api-keys", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "delete", service: wk.service }),
+                                });
+                              }
+                              setByokMsg(ts.byokDeleted);
+                              setByokEditing(null);
+                              const data = await fetch("/api/api-keys").then((r) => r.json());
+                              setApiKeys(data.keys || []);
+                              setTimeout(() => setByokMsg(""), 3000);
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded border border-red-200 transition-colors cursor-pointer"
+                          >
+                            {ts.byokDelete}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           {byokMsg && <p className="text-sm text-green-600 mt-3">{byokMsg}</p>}
         </div>}

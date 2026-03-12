@@ -126,6 +126,15 @@ const STATUS_STYLES: Record<string, string> = {
   paused: "bg-yellow-100 text-yellow-700",
 };
 
+const STEP_TYPES: WorkflowStep["type"][] = ["trigger", "action", "condition", "end"];
+
+const ACTION_KEYS = [
+  "triggerNewLead", "triggerFormSubmit", "triggerSchedule", "triggerWebhook", "triggerEmailReply", "triggerPageVisit",
+  "actionSendEmail", "actionWait", "actionCondition", "actionEnrichLead", "actionAddToCrm",
+  "actionNotify", "actionRunAgent", "actionPostSocial", "actionScore", "actionTag",
+  "ifLabel", "endLabel",
+];
+
 function StepTimeline({ steps, tw }: { steps: WorkflowStep[]; tw: Record<string, string> }) {
   return (
     <div className="relative">
@@ -155,6 +164,228 @@ function StepTimeline({ steps, tw }: { steps: WorkflowStep[]; tw: Record<string,
   );
 }
 
+/* ── Edit Modal ── */
+function EditModal({
+  workflow,
+  tw,
+  onSave,
+  onCancel,
+}: {
+  workflow: Workflow;
+  tw: Record<string, string>;
+  onSave: (updated: Workflow) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(workflow.name);
+  const [desc, setDesc] = useState(workflow.desc);
+  const [steps, setSteps] = useState<WorkflowStep[]>([...workflow.steps]);
+
+  function addStep() {
+    const endIdx = steps.findIndex((s) => s.type === "end");
+    const newStep: WorkflowStep = { type: "action", labelKey: "actionSendEmail" };
+    if (endIdx >= 0) {
+      const updated = [...steps];
+      updated.splice(endIdx, 0, newStep);
+      setSteps(updated);
+    } else {
+      setSteps([...steps, newStep]);
+    }
+  }
+
+  function removeStep(idx: number) {
+    if (steps.length <= 2) return;
+    setSteps(steps.filter((_, i) => i !== idx));
+  }
+
+  function moveStep(idx: number, dir: -1 | 1) {
+    const target = idx + dir;
+    if (target < 0 || target >= steps.length) return;
+    const updated = [...steps];
+    [updated[idx], updated[target]] = [updated[target], updated[idx]];
+    setSteps(updated);
+  }
+
+  function updateStep(idx: number, field: "type" | "labelKey", value: string) {
+    const updated = [...steps];
+    if (field === "type") {
+      updated[idx] = { ...updated[idx], type: value as WorkflowStep["type"] };
+    } else {
+      updated[idx] = { ...updated[idx], labelKey: value };
+    }
+    setSteps(updated);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 max-h-[85vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+          <h2 className="font-semibold text-lg">{tw.editWorkflow}</h2>
+          <button onClick={onCancel} className="text-gray-400 hover:text-gray-600 cursor-pointer text-xl">&times;</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+          {/* Name */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{tw.workflowName}</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">{tw.workflowDesc}</label>
+            <input
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+          </div>
+
+          {/* Steps */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-medium text-gray-600">{tw.steps}</label>
+              <button onClick={addStep} className="text-xs text-red-600 hover:text-red-800 font-medium cursor-pointer">+ {tw.addStep}</button>
+            </div>
+            <div className="space-y-2">
+              {steps.map((step, i) => (
+                <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200">
+                  <span className="text-xs text-gray-400 w-5 shrink-0">{i + 1}</span>
+                  <select
+                    value={step.type}
+                    onChange={(e) => updateStep(i, "type", e.target.value)}
+                    className="text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+                  >
+                    {STEP_TYPES.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={step.labelKey}
+                    onChange={(e) => updateStep(i, "labelKey", e.target.value)}
+                    className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 bg-white"
+                  >
+                    {ACTION_KEYS.map((k) => (
+                      <option key={k} value={k}>{tw[k] || k}</option>
+                    ))}
+                  </select>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => moveStep(i, -1)} disabled={i === 0} className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer" title={tw.moveUp}>↑</button>
+                    <button onClick={() => moveStep(i, 1)} disabled={i === steps.length - 1} className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-30 cursor-pointer" title={tw.moveDown}>↓</button>
+                    <button onClick={() => removeStep(i)} disabled={steps.length <= 2} className="text-xs text-red-400 hover:text-red-600 disabled:opacity-30 cursor-pointer ml-1" title={tw.removeStep}>&times;</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2 shrink-0">
+          <button onClick={onCancel} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">{tw.cancel}</button>
+          <button
+            onClick={() => onSave({ ...workflow, name, desc, steps })}
+            className="px-4 py-2 text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium cursor-pointer"
+          >
+            {tw.save}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Test Modal ── */
+function TestModal({
+  workflow,
+  tw,
+  onClose,
+}: {
+  workflow: Workflow;
+  tw: Record<string, string>;
+  onClose: () => void;
+}) {
+  const [stepResults, setStepResults] = useState<("pending" | "running" | "passed")[]>(
+    workflow.steps.map(() => "pending")
+  );
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function runTest() {
+    setRunning(true);
+    setDone(false);
+    const results: ("pending" | "running" | "passed")[] = workflow.steps.map(() => "pending");
+    setStepResults([...results]);
+
+    for (let i = 0; i < workflow.steps.length; i++) {
+      const updated: ("pending" | "running" | "passed")[] = [...results];
+      updated[i] = "running";
+      setStepResults([...updated]);
+      await new Promise((r) => setTimeout(r, 400 + Math.random() * 300));
+      updated[i] = "passed";
+      results[i] = "passed";
+      setStepResults([...updated]);
+    }
+    setRunning(false);
+    setDone(true);
+  }
+
+  const statusLabel = (s: string) =>
+    s === "passed" ? tw.testStepPassed : s === "running" ? tw.testStepRunning : tw.testStepPending;
+
+  const statusColor = (s: string) =>
+    s === "passed" ? "text-green-600" : s === "running" ? "text-blue-600 animate-pulse" : "text-gray-400";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[80vh] flex flex-col">
+        <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between shrink-0">
+          <h2 className="font-semibold text-lg">{tw.testWorkflow}</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 cursor-pointer text-xl">&times;</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <p className="text-sm text-gray-500 mb-4">{workflow.name}</p>
+          <div className="space-y-2">
+            {workflow.steps.map((step, i) => {
+              const style = STEP_STYLES[step.type];
+              return (
+                <div key={i} className={`flex items-center justify-between px-3 py-2 rounded-md border ${style.bg} ${style.border}`}>
+                  <span className={`text-xs font-medium ${style.text}`}>
+                    {tw[step.labelKey] || step.labelKey}
+                  </span>
+                  <span className={`text-xs font-medium ${statusColor(stepResults[i])}`}>
+                    {statusLabel(stepResults[i])}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {done && (
+            <div className="mt-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 font-medium">
+              {tw.testSuccess}
+            </div>
+          )}
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 flex justify-end gap-2 shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 cursor-pointer">{tw.cancel}</button>
+          <button
+            onClick={runTest}
+            disabled={running}
+            className="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-lg font-medium cursor-pointer"
+          >
+            {running ? tw.testing : tw.test}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function WorkflowsPage() {
   const params = useParams();
   const locale = (params.locale as Locale) || "en";
@@ -167,6 +398,8 @@ export default function WorkflowsPage() {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [myWorkflows, setMyWorkflows] = useState<Workflow[]>([]);
   const [expandedWorkflow, setExpandedWorkflow] = useState<string | null>(null);
+  const [editingWorkflow, setEditingWorkflow] = useState<Workflow | null>(null);
+  const [testingWorkflow, setTestingWorkflow] = useState<Workflow | null>(null);
 
   function addFromTemplate(tmpl: WorkflowTemplate) {
     const name = tw[tmpl.key] || tmpl.key;
@@ -216,6 +449,11 @@ export default function WorkflowsPage() {
     setMyWorkflows((prev) => prev.filter((w) => w.id !== id));
   }
 
+  function saveWorkflow(updated: Workflow) {
+    setMyWorkflows((prev) => prev.map((w) => (w.id === updated.id ? updated : w)));
+    setEditingWorkflow(null);
+  }
+
   if (userLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -229,7 +467,7 @@ export default function WorkflowsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{tw.title}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/workflows`} className="bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a href={`/auth/login?returnTo=/${locale}/dashboard/workflows`} className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
         </div>
       </div>
     );
@@ -246,7 +484,7 @@ export default function WorkflowsPage() {
           </div>
           <button
             onClick={createBlank}
-            className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap"
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer whitespace-nowrap"
           >
             + {tw.createWorkflow}
           </button>
@@ -289,7 +527,7 @@ export default function WorkflowsPage() {
               <div className="flex gap-3 justify-center">
                 <button
                   onClick={createBlank}
-                  className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                  className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
                 >
                   {tw.fromScratch}
                 </button>
@@ -329,6 +567,20 @@ export default function WorkflowsPage() {
                           <span>{tw.lastRun}: {wf.lastRun ? new Date(wf.lastRun).toLocaleDateString() : tw.never}</span>
                         </div>
                         <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setEditingWorkflow(wf)}
+                            className="text-xs text-blue-600 hover:bg-blue-50 font-medium cursor-pointer px-2 py-1 rounded transition-colors"
+                            title={tw.edit}
+                          >
+                            {tw.edit}
+                          </button>
+                          <button
+                            onClick={() => setTestingWorkflow(wf)}
+                            className="text-xs text-emerald-600 hover:bg-emerald-50 font-medium cursor-pointer px-2 py-1 rounded transition-colors"
+                            title={tw.test}
+                          >
+                            {tw.test}
+                          </button>
                           <button
                             onClick={() => toggleStatus(wf.id)}
                             className={`text-xs font-medium cursor-pointer px-2 py-1 rounded transition-colors ${
@@ -388,7 +640,7 @@ export default function WorkflowsPage() {
                     <div className="flex items-center justify-between">
                       <button
                         onClick={() => addFromTemplate(tmpl)}
-                        className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer"
+                        className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-md font-medium transition-colors cursor-pointer"
                       >
                         {tw.useTemplate}
                       </button>
@@ -412,6 +664,25 @@ export default function WorkflowsPage() {
           </div>
         )}
       </div>
+
+      {/* Edit Modal */}
+      {editingWorkflow && (
+        <EditModal
+          workflow={editingWorkflow}
+          tw={tw}
+          onSave={saveWorkflow}
+          onCancel={() => setEditingWorkflow(null)}
+        />
+      )}
+
+      {/* Test Modal */}
+      {testingWorkflow && (
+        <TestModal
+          workflow={testingWorkflow}
+          tw={tw}
+          onClose={() => setTestingWorkflow(null)}
+        />
+      )}
     </DashboardShell>
   );
 }

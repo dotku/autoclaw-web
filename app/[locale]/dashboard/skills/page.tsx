@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from "@auth0/nextjs-auth0/client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import DashboardShell from "@/components/DashboardShell";
@@ -9,44 +9,12 @@ import DashboardShell from "@/components/DashboardShell";
 type Category = "all" | "email" | "seo" | "leads" | "social" | "analytics" | "automation";
 
 interface Skill {
+  id: number;
   key: string;
   category: Exclude<Category, "all">;
   agents: number;
   active: boolean;
 }
-
-const SKILLS: Skill[] = [
-  // Email
-  { key: "skillColdEmail", category: "email", agents: 3, active: true },
-  { key: "skillFollowUp", category: "email", agents: 2, active: true },
-  { key: "skillNewsletter", category: "email", agents: 1, active: false },
-  { key: "skillEmailTemplate", category: "email", agents: 1, active: false },
-  // SEO
-  { key: "skillBlogWriter", category: "seo", agents: 4, active: true },
-  { key: "skillKeywordResearch", category: "seo", agents: 2, active: true },
-  { key: "skillSeoAudit", category: "seo", agents: 1, active: false },
-  { key: "skillMetaOptimizer", category: "seo", agents: 1, active: false },
-  // Leads
-  { key: "skillLinkedIn", category: "leads", agents: 3, active: true },
-  { key: "skillWebScraper", category: "leads", agents: 2, active: false },
-  { key: "skillEnrichment", category: "leads", agents: 1, active: false },
-  { key: "skillCrmSync", category: "leads", agents: 2, active: true },
-  // Social
-  { key: "skillTweetComposer", category: "social", agents: 3, active: true },
-  { key: "skillContentScheduler", category: "social", agents: 2, active: true },
-  { key: "skillSocialListening", category: "social", agents: 1, active: false },
-  { key: "skillHashtagResearch", category: "social", agents: 1, active: false },
-  // Analytics
-  { key: "skillTrafficDashboard", category: "analytics", agents: 2, active: true },
-  { key: "skillCampaignAnalytics", category: "analytics", agents: 3, active: true },
-  { key: "skillConversionTracking", category: "analytics", agents: 1, active: false },
-  { key: "skillReportGenerator", category: "analytics", agents: 2, active: false },
-  // Automation
-  { key: "skillWorkflowBuilder", category: "automation", agents: 2, active: true },
-  { key: "skillWebhookTrigger", category: "automation", agents: 1, active: false },
-  { key: "skillDataPipeline", category: "automation", agents: 1, active: false },
-  { key: "skillTaskScheduler", category: "automation", agents: 2, active: true },
-];
 
 const CATEGORY_ICONS: Record<Exclude<Category, "all">, string> = {
   email: "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z",
@@ -66,6 +34,47 @@ export default function SkillsPage() {
 
   const { user, isLoading: userLoading } = useUser();
   const [activeCategory, setActiveCategory] = useState<Category>("all");
+  const [skills, setSkills] = useState<Skill[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch("/api/skills")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.skills) {
+          setSkills(data.skills.map((s: Record<string, unknown>) => ({
+            id: Number(s.id),
+            key: s.key as string,
+            category: s.category as Exclude<Category, "all">,
+            agents: Number(s.agents || 0),
+            active: s.active === true || s.active === "true",
+          })));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [user]);
+
+  async function toggleSkill(skill: Skill) {
+    setToggling(skill.id);
+    const newActive = !skill.active;
+    // Optimistic update
+    setSkills((prev) => prev.map((s) => s.id === skill.id ? { ...s, active: newActive } : s));
+    try {
+      await fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skill_id: skill.id, active: newActive }),
+      });
+    } catch {
+      // Revert on error
+      setSkills((prev) => prev.map((s) => s.id === skill.id ? { ...s, active: !newActive } : s));
+    } finally {
+      setToggling(null);
+    }
+  }
 
   const categories: { key: Category; label: string }[] = [
     { key: "all", label: ts.allCategories },
@@ -77,7 +86,7 @@ export default function SkillsPage() {
     { key: "automation", label: ts.catAutomation },
   ];
 
-  const filtered = activeCategory === "all" ? SKILLS : SKILLS.filter((s) => s.category === activeCategory);
+  const filtered = activeCategory === "all" ? skills : skills.filter((s) => s.category === activeCategory);
 
   if (userLoading) {
     return (
@@ -106,6 +115,9 @@ export default function SkillsPage() {
             <h1 className="text-2xl font-bold">{ts.title}</h1>
             <p className="text-sm text-gray-500 mt-1">{ts.subtitle}</p>
           </div>
+          <div className="text-sm text-gray-400">
+            {skills.filter((s) => s.active).length} / {skills.length} {ts.active.toLowerCase()}
+          </div>
         </div>
 
         {/* Category filter pills */}
@@ -126,7 +138,9 @@ export default function SkillsPage() {
         </div>
 
         {/* Skills grid */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <p className="text-gray-500">{tc.loading}</p>
+        ) : filtered.length === 0 ? (
           <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
             <p className="text-gray-500">{ts.noSkills}</p>
           </div>
@@ -140,7 +154,7 @@ export default function SkillsPage() {
 
               return (
                 <div
-                  key={skill.key}
+                  key={skill.id}
                   className="bg-white rounded-lg border border-gray-200 p-5 hover:shadow-md transition-shadow flex flex-col"
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -149,13 +163,17 @@ export default function SkillsPage() {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={icon} />
                       </svg>
                     </div>
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                        skill.active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+                    {/* Toggle switch */}
+                    <button
+                      onClick={() => toggleSkill(skill)}
+                      disabled={toggling === skill.id}
+                      className={`relative shrink-0 inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer disabled:opacity-50 ${
+                        skill.active ? "bg-green-500" : "bg-gray-300"
                       }`}
+                      title={skill.active ? ts.active : ts.available}
                     >
-                      {skill.active ? ts.active : ts.available}
-                    </span>
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${skill.active ? "translate-x-6" : "translate-x-1"}`} />
+                    </button>
                   </div>
                   <h3 className="font-semibold text-sm mb-1">{name}</h3>
                   <p className="text-xs text-gray-500 mb-3 flex-1">{desc}</p>

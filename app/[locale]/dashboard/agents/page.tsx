@@ -14,7 +14,7 @@ interface AgentAssignment {
   project_id?: number;
   config?: {
     plan?: string;
-    tasks?: { name: string; status: string }[];
+    tasks?: { name: string; status: string; result?: string }[];
     blockers?: string[];
   };
 }
@@ -55,6 +55,15 @@ function statusBadge(status: string | null) {
   );
 }
 
+function RunningTimer({ startedAt }: { startedAt: number }) {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    return () => clearInterval(interval);
+  }, [startedAt]);
+  return <span className="ml-1 text-yellow-600 font-normal">({elapsed}s)</span>;
+}
+
 export default function AgentsPage() {
   const params = useParams();
   const locale = (params.locale as Locale) || "en";
@@ -82,6 +91,10 @@ export default function AgentsPage() {
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [newProject, setNewProject] = useState({ name: "", website: "", description: "" });
   const [actionLoading, setActionLoading] = useState(false);
+  const [runningTask, setRunningTask] = useState<{ agentId: number; taskIndex: number; startedAt: number } | null>(null);
+  const [taskResult, setTaskResult] = useState<Record<number, { result?: unknown; message?: string; error?: string }>>({});
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
+  const [taskReports, setTaskReports] = useState<Record<number, { task_name: string; summary: string; metrics: Record<string, unknown>; created_at: string }[]>>({});
 
   const loadData = () => {
     const ts = Date.now();
@@ -89,7 +102,7 @@ export default function AgentsPage() {
       fetch(`/api/reports?_t=${ts}`).then((r) => r.json()),
       fetch(`/api/projects?_t=${ts}`).then((r) => r.json()),
     ]).then(([reportData, projectData]) => {
-      setAgents(reportData.agents || []);
+      setAgents(projectData.agents || []);
       setServerAgents(reportData.serverAgents || reportData.reports || []);
       setProjects(projectData.projects || []);
       setPlanInfo({
@@ -148,22 +161,55 @@ export default function AgentsPage() {
 
   async function executeTask(agentId: number, taskIndex: number) {
     setActionLoading(true);
+    setRunningTask({ agentId, taskIndex, startedAt: Date.now() });
+    setTaskResult((prev) => ({ ...prev, [agentId]: {} }));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
     try {
-      const res = await fetch("/api/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }) });
+      const res = await fetch("/api/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }), signal: controller.signal });
       const data = await res.json();
-      if (!res.ok) alert(data.error || ta.taskFailed);
+      if (!res.ok) {
+        setTaskResult((prev) => ({ ...prev, [agentId]: { error: data.error || ta.taskFailed } }));
+      } else {
+        setTaskResult((prev) => ({ ...prev, [agentId]: { result: data.result, message: data.message } }));
+      }
       await loadData();
-    } finally { setActionLoading(false); }
+    } catch (e) {
+      const msg = e instanceof DOMException && e.name === "AbortError" ? "Task timed out (2 min). It may still be running on the server." : ta.taskFailed;
+      setTaskResult((prev) => ({ ...prev, [agentId]: { error: msg } }));
+    } finally { clearTimeout(timeout); setActionLoading(false); setRunningTask(null); }
   }
 
   async function runNextTask(agentId: number) {
     setActionLoading(true);
+    setRunningTask({ agentId, taskIndex: -1, startedAt: Date.now() });
+    setTaskResult((prev) => ({ ...prev, [agentId]: {} }));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
     try {
-      const res = await fetch("/api/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent_id: agentId, action: "run-all" }) });
+      const res = await fetch("/api/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent_id: agentId, action: "run-all" }), signal: controller.signal });
       const data = await res.json();
-      if (!res.ok) alert(data.error || ta.taskFailed);
+      if (!res.ok) {
+        setTaskResult((prev) => ({ ...prev, [agentId]: { error: data.error || ta.taskFailed } }));
+      } else {
+        setTaskResult((prev) => ({ ...prev, [agentId]: { result: data.result, message: data.message } }));
+      }
       await loadData();
-    } finally { setActionLoading(false); }
+    } catch (e) {
+      const msg = e instanceof DOMException && e.name === "AbortError" ? "Task timed out (2 min). It may still be running on the server." : ta.taskFailed;
+      setTaskResult((prev) => ({ ...prev, [agentId]: { error: msg } }));
+    } finally { clearTimeout(timeout); setActionLoading(false); setRunningTask(null); }
+  }
+
+  function toggleTaskDetail(agentId: number, taskIndex: number) {
+    const key = `${agentId}-${taskIndex}`;
+    setExpandedTasks((prev) => ({ ...prev, [key]: !prev[key] }));
+    // Fetch reports for this agent if not loaded yet
+    if (!taskReports[agentId]) {
+      fetch(`/api/agent-reports?agent_id=${agentId}`).then((r) => r.json()).then((data) => {
+        setTaskReports((prev) => ({ ...prev, [agentId]: data.reports || [] }));
+      });
+    }
   }
 
   async function deleteProject(projectId: number) {
@@ -268,7 +314,7 @@ export default function AgentsPage() {
                       {projectAgents.map((agent) => {
                         const config = agent.config || {};
                         const tasks = config.tasks || [];
-                        const blockers = config.blockers || [];
+                        const blockers = (config.blockers || []).filter((b) => !b.toLowerCase().includes("linkedin"));
                         const completedTasks = tasks.filter((t) => t.status === "completed").length;
                         const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;
                         const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
@@ -308,18 +354,48 @@ export default function AgentsPage() {
                             {tasks.length > 0 && (
                               <div className="mb-3">
                                 <p className="text-xs font-medium text-gray-500 mb-2">{ta.tasksLabel}</p>
-                                <div className="space-y-1.5">
-                                  {tasks.map((task, i) => (
-                                    <div key={i} className="flex items-start gap-2 text-xs">
-                                      <span className="mt-0.5 flex-shrink-0">
-                                        {task.status === "completed" ? <span className="text-green-500">&#10003;</span> : task.status === "in_progress" ? <span className="text-red-500">&#9679;</span> : <span className="text-gray-300">&#9675;</span>}
-                                      </span>
-                                      <span className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}>{task.name}</span>
-                                      {(task.status === "in_progress" || task.status === "pending") && (
-                                        <button onClick={() => executeTask(agent.id, i)} disabled={actionLoading} className="text-xs text-green-500 hover:text-green-700 font-medium whitespace-nowrap cursor-pointer">{tc.run}</button>
-                                      )}
-                                    </div>
-                                  ))}
+                                <div className="space-y-1">
+                                  {tasks.map((task, i) => {
+                                    const taskKey = `${agent.id}-${i}`;
+                                    const isExpanded = expandedTasks[taskKey];
+                                    const reports = taskReports[agent.id] || [];
+                                    const matchedReport = reports.find((_r, idx) => idx === i) || reports.find((r) => task.name.toLowerCase().includes(r.task_name.toLowerCase().split(" ")[0]));
+                                    const isThisTaskRunning = runningTask?.agentId === agent.id && (runningTask.taskIndex === i || runningTask.taskIndex === -1);
+
+                                    return (
+                                      <div key={i}>
+                                        <div className="flex items-start gap-2 text-xs">
+                                          <span className="mt-0.5 flex-shrink-0">
+                                            {isThisTaskRunning
+                                              ? <span className="text-yellow-500 animate-spin inline-block">&#9696;</span>
+                                              : task.status === "completed" ? <span className="text-green-500">&#10003;</span> : task.status === "in_progress" ? <span className="text-red-500">&#9679;</span> : <span className="text-gray-300">&#9675;</span>}
+                                          </span>
+                                          <span className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}>
+                                            {task.name}
+                                            {isThisTaskRunning && <RunningTimer startedAt={runningTask!.startedAt} />}
+                                          </span>
+                                          {task.status === "completed" && task.result && (
+                                            <button onClick={() => toggleTaskDetail(agent.id, i)} className="text-xs text-blue-500 hover:text-blue-700 font-medium whitespace-nowrap cursor-pointer">
+                                              {isExpanded ? "Hide" : "Log"}
+                                            </button>
+                                          )}
+                                          {(task.status === "in_progress" || task.status === "pending") && !isThisTaskRunning && (
+                                            <button onClick={() => executeTask(agent.id, i)} disabled={actionLoading} className="text-xs text-green-500 hover:text-green-700 font-medium whitespace-nowrap cursor-pointer">{tc.run}</button>
+                                          )}
+                                        </div>
+                                        {isExpanded && task.result && (
+                                          <div className="ml-6 mt-1 mb-2 bg-gray-50 border border-gray-100 rounded-md p-2">
+                                            <p className="text-xs text-gray-500 mb-1">{task.result}</p>
+                                            {matchedReport && (
+                                              <pre className="text-xs text-gray-600 whitespace-pre-wrap break-words max-h-60 overflow-y-auto bg-white rounded p-2 mt-1">
+                                                {JSON.stringify(matchedReport.metrics, null, 2)}
+                                              </pre>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}
@@ -338,6 +414,36 @@ export default function AgentsPage() {
                                     </li>
                                   ))}
                                 </ul>
+                              </div>
+                            )}
+
+                            {/* Task execution result */}
+                            {taskResult[agent.id] && (taskResult[agent.id].result || taskResult[agent.id].message || taskResult[agent.id].error) && (
+                              <div className={`mt-3 rounded-md p-3 ${taskResult[agent.id].error ? "bg-red-50 border border-red-100" : "bg-green-50 border border-green-100"}`}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <p className={`text-xs font-medium ${taskResult[agent.id].error ? "text-red-600" : "text-green-700"}`}>
+                                    {taskResult[agent.id].error ? ta.taskFailed : "Result"}
+                                  </p>
+                                  <button
+                                    onClick={() => setTaskResult((prev) => { const n = { ...prev }; delete n[agent.id]; return n; })}
+                                    className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                                  >
+                                    &times;
+                                  </button>
+                                </div>
+                                {taskResult[agent.id].error && (
+                                  <p className="text-xs text-red-500">{taskResult[agent.id].error}</p>
+                                )}
+                                {taskResult[agent.id].message && (
+                                  <p className="text-xs text-green-600">{taskResult[agent.id].message}</p>
+                                )}
+                                {taskResult[agent.id].result != null && (
+                                  <pre className="text-xs text-gray-700 mt-1 whitespace-pre-wrap break-words max-h-60 overflow-y-auto bg-white/60 rounded p-2">
+                                    {typeof taskResult[agent.id].result === "string"
+                                      ? String(taskResult[agent.id].result)
+                                      : JSON.stringify(taskResult[agent.id].result, null, 2)}
+                                  </pre>
+                                )}
                               </div>
                             )}
                           </div>

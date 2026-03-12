@@ -100,7 +100,7 @@ function SignupForm({ t }: { t: ReturnType<typeof getDictionary>["landing"] }) {
           <label className="block text-sm font-medium text-gray-300 mb-1">{t.formGoals}</label>
           <textarea name="goals" rows={3} className="w-full px-4 py-2.5 bg-white/10 border border-white/20 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-red-400" placeholder={t.formGoalsPlaceholder} />
         </div>
-        <button type="submit" disabled={status === "loading"} className="w-full bg-red-800 hover:bg-red-900 disabled:bg-red-500/50 text-white py-3 rounded-lg font-medium transition-colors text-lg">
+        <button type="submit" disabled={status === "loading"} className="w-full bg-red-700 hover:bg-red-800 disabled:bg-red-500/50 text-white py-3 rounded-lg font-medium transition-colors text-lg">
           {status === "loading" ? t.formSubmitting : t.formSubmit}
         </button>
         {status === "error" && <p className="text-red-400 text-sm text-center">{t.formError}</p>}
@@ -221,16 +221,16 @@ export default function Home() {
 
       <main>
         {/* Hero */}
-        <section className="bg-gradient-to-br from-slate-900 via-red-950 to-slate-900 text-white">
+        <section className="bg-gradient-to-br from-gray-900 via-red-900 to-gray-900 text-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-36 text-center">
-            <p className="text-red-400 font-semibold text-sm uppercase tracking-wider mb-4">{t.heroTag}</p>
+            <p className="text-red-300 font-semibold text-sm uppercase tracking-wider mb-4">{t.heroTag}</p>
             <h1 className="text-4xl md:text-6xl font-bold leading-tight mb-6 max-w-4xl mx-auto">
-              {t.heroTitle} <span className="text-red-400">{t.heroTitleHighlight}</span>
+              {t.heroTitle} <span className="text-red-300">{t.heroTitleHighlight}</span>
             </h1>
             <p className="text-xl text-gray-300 mb-10 max-w-2xl mx-auto leading-relaxed">{t.heroDescription}</p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-800 hover:bg-red-900 text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.startFree}</a>
-              <a href="#how-it-works" className="border border-gray-500 hover:border-white text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.seeHowItWorks}</a>
+              <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-700 hover:bg-red-800 text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.startFree}</a>
+              <a href="#how-it-works" className="border border-red-400/50 hover:border-red-300 text-white px-8 py-4 rounded-lg font-medium text-lg transition-colors">{t.seeHowItWorks}</a>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-20 pt-12 border-t border-gray-700 max-w-3xl mx-auto">
               {stats.map((stat) => (

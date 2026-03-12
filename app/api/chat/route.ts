@@ -667,6 +667,9 @@ export async function POST(req: NextRequest) {
       "twitter_api_secret": "twitter_api_secret",
       "twitter_access_token": "twitter_access_token",
       "twitter_access_token_secret": "twitter_access_token_secret",
+      "worker_url": "worker_url",
+      "worker_secret": "worker_secret",
+      "cloudflare": "worker_url",
     };
 
     // Match: "add my key sk_xxx to openai" or "add key clh_xxx to clawhub"
