@@ -47,6 +47,7 @@ export default function DashboardShell({ children, user, plan, fullHeight }: Pro
       children: [
         { href: `/${locale}/dashboard/agents`, label: tc.agents },
         { href: `/${locale}/dashboard/workflows`, label: tc.workflows },
+        { href: `/${locale}/dashboard/partners`, label: tc.partners },
       ],
     },
     {

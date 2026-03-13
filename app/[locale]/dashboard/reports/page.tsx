@@ -85,14 +85,14 @@ interface MetricsSummary {
 const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
 const TRAFFIC_FILTER_STORAGE_PREFIX = "reports:traffic:selectedProjects";
 
-function ProjectPieChart({ title, slices }: { title: string; slices: { label: string; value: number; color: string }[] }) {
+function ProjectPieChart({ title, slices, emptyLabel }: { title: string; slices: { label: string; value: number; color: string }[]; emptyLabel?: string }) {
   const total = slices.reduce((sum, s) => sum + s.value, 0);
   if (total <= 0) {
     return (
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h3 className="text-sm font-semibold mb-3">{title}</h3>
         <div className="h-56 flex items-center justify-center rounded border border-dashed border-gray-200 text-xs text-gray-400">
-          No data yet
+          {emptyLabel || "No data yet"}
         </div>
       </div>
     );
@@ -666,7 +666,7 @@ export default function ReportsPage() {
     if (entries.length <= 7) return entries;
     const top = entries.slice(0, 7);
     const rest = entries.slice(7).reduce((sum, e) => sum + e.value, 0);
-    if (rest > 0) top.push({ label: "Others", value: rest, color: "#9ca3af" });
+    if (rest > 0) top.push({ label: tr.others, value: rest, color: "#9ca3af" });
     return top;
   };
 
@@ -880,7 +880,7 @@ export default function ReportsPage() {
                 <h2 className="text-lg font-semibold mb-4">{tr.project} KPI</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {projectPieCharts.map((chart) => (
-                    <ProjectPieChart key={chart.key} title={chart.title} slices={chart.slices} />
+                    <ProjectPieChart key={chart.key} title={chart.title} slices={chart.slices} emptyLabel={tr.noDataYet} />
                   ))}
                 </div>
               </section>

@@ -279,6 +279,37 @@ CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);
 CREATE INDEX IF NOT EXISTS idx_referrals_referred ON referrals(referred_id);
 CREATE INDEX IF NOT EXISTS idx_referral_commissions_referrer ON referral_commissions(referrer_id);
 
+-- Business Partners (global catalog, admin-managed, visible to all users)
+CREATE TABLE IF NOT EXISTS business_partners (
+  id SERIAL PRIMARY KEY,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  name VARCHAR(255) NOT NULL,
+  contact_person VARCHAR(255),
+  email VARCHAR(255),
+  phone VARCHAR(50),
+  website VARCHAR(500),
+  address TEXT,
+  partner_type VARCHAR(50) DEFAULT 'partner', -- 'supplier', 'vendor', 'distributor', 'reseller', 'partner', 'other'
+  status VARCHAR(20) DEFAULT 'active', -- 'active', 'inactive', 'pending'
+  description TEXT,
+  notes TEXT,
+  tags TEXT[] DEFAULT '{}',
+  logo_url VARCHAR(500),
+  discount VARCHAR(100),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_business_partners_type ON business_partners(partner_type);
+CREATE INDEX IF NOT EXISTS idx_business_partners_status ON business_partners(status);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_business_partners_name ON business_partners(name);
+
+-- Seed global partners
+INSERT INTO business_partners (name, website, partner_type, status, description, logo_url, discount)
+VALUES
+  ('Numix XPilot', 'https://www.numix.co/numix-xpilot', 'partner', 'active', 'Tax Credits on Autopilot with Full Stack Accounting & CFO services by Numix', 'https://framerusercontent.com/images/MfxaJudXEVxeeht8WnKAsVFWXg.png', '10% off')
+ON CONFLICT (name) DO NOTHING;
+
 -- User budget settings
 CREATE TABLE IF NOT EXISTS user_budgets (
   id SERIAL PRIMARY KEY,

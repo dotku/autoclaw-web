@@ -49,7 +49,12 @@ interface ServerAgent {
   enabled?: boolean;
 }
 
-function statusBadge(status: string | null) {
+const AGENT_STATUS_LABELS: Record<string, Record<string, string>> = {
+  en: { active: "Active", pending: "Pending", paused: "Paused", completed: "Completed", unknown: "Unknown" },
+  zh: { active: "运行中", pending: "待运行", paused: "已暂停", completed: "已完成", unknown: "未知" },
+};
+
+function statusBadge(status: string | null, locale = "en") {
   const colors: Record<string, string> = {
     active: "bg-green-100 text-green-700",
     pending: "bg-blue-100 text-blue-700",
@@ -57,11 +62,12 @@ function statusBadge(status: string | null) {
     completed: "bg-red-100 text-red-700",
   };
   const s = status || "unknown";
+  const label = AGENT_STATUS_LABELS[locale]?.[s] || AGENT_STATUS_LABELS.en[s] || s;
   return (
     <span
       className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[s] || "bg-gray-100 text-gray-600"}`}
     >
-      {s}
+      {label}
     </span>
   );
 }
@@ -88,7 +94,7 @@ function stringifyResult(value: unknown): string {
   }
 }
 
-function formatExecutionData(data: unknown): string {
+function formatExecutionData(data: unknown, labels?: { statusCompleted: string; statusFailed: string; executedTasks: string; executionCompleted: string }): string {
   if (!data || typeof data !== "object") {
     return stringifyResult(data);
   }
@@ -108,10 +114,12 @@ function formatExecutionData(data: unknown): string {
   };
 
   if (Array.isArray(payload.results)) {
+    const completedLabel = labels?.statusCompleted || "completed";
+    const failedLabel = labels?.statusFailed || "failed";
     const sections = payload.results.map((item, index) => {
       const lines = [
         `## ${index + 1}. ${item.task_name || `Task ${item.task_index ?? index}`}`,
-        item.ok ? "- Status: completed" : "- Status: failed",
+        item.ok ? `- Status: ${completedLabel}` : `- Status: ${failedLabel}`,
       ];
 
       if (item.error) {
@@ -136,8 +144,8 @@ function formatExecutionData(data: unknown): string {
     const header =
       payload.message ||
       (payload.tasks_run
-        ? `Executed ${payload.tasks_run} tasks`
-        : "Execution completed");
+        ? (labels?.executedTasks || "Executed {count} tasks").replace("{count}", String(payload.tasks_run))
+        : labels?.executionCompleted || "Execution completed");
     return [`# ${header}`, "", ...sections].join("\n\n");
   }
 
@@ -476,11 +484,7 @@ export default function AgentsPage() {
         }
 
         // No matching key found — redirect to settings
-        const goToSettings = confirm(
-          locale === "zh"
-            ? "未找到所需的 API 密钥。是否前往设置页面添加？"
-            : "Required API key not found. Go to Settings to add it?"
-        );
+        const goToSettings = confirm(ta.apiKeyNotFound);
         if (goToSettings) {
           window.location.href = `/${locale}/dashboard/settings#section-byok`;
         }
@@ -541,7 +545,7 @@ export default function AgentsPage() {
     } catch (e) {
       const msg =
         e instanceof DOMException && e.name === "AbortError"
-          ? "Task timed out (2 min). It may still be running on the server."
+          ? ta.taskTimeout
           : ta.taskFailed;
       setTaskResult((prev) => ({ ...prev, [agentId]: { error: msg } }));
     } finally {
@@ -591,7 +595,7 @@ export default function AgentsPage() {
             setTaskResult((prev) => ({
               ...prev,
               [agentId]: {
-                error: "Run-all stopped on task failure",
+                error: ta.runAllStopped,
                 result: { tasks_run: results.length, results },
               },
             }));
@@ -626,7 +630,7 @@ export default function AgentsPage() {
       setTaskResult((prev) => ({
         ...prev,
         [agentId]: {
-          message: "All selected tasks completed",
+          message: ta.allTasksCompleted,
           result: { tasks_run: results.length, results },
         },
       }));
@@ -703,7 +707,7 @@ export default function AgentsPage() {
     } catch (e) {
       const msg =
         e instanceof DOMException && e.name === "AbortError"
-          ? "Task timed out (2 min). It may still be running on the server."
+          ? ta.taskTimeout
           : ta.taskFailed;
       setTaskResult((prev) => ({ ...prev, [agentId]: { error: msg } }));
     } finally {
@@ -1006,7 +1010,7 @@ export default function AgentsPage() {
                                     </button>
                                   </>
                                 )}
-                                {statusBadge(agent.status)}
+                                {statusBadge(agent.status, locale)}
                                 <button
                                   onClick={() => deactivateAgent(agent.id)}
                                   className="text-xs text-red-400 hover:text-red-600 cursor-pointer"
