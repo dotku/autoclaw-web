@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
   const userId = users[0].id;
 
   const agents = await sql`
-    SELECT aa.id FROM agent_assignments aa
+    SELECT aa.id, aa.config, aa.agent_type, aa.status as agent_status
+    FROM agent_assignments aa
     JOIN projects p ON aa.project_id = p.id
     WHERE aa.id = ${agentId} AND p.user_id = ${userId}
   `;
@@ -42,7 +43,22 @@ export async function GET(req: NextRequest) {
     LIMIT 20
   `;
 
+  // Also return task statuses from config — these contain error details
+  // even when saveReport wasn't called (e.g. older code or report write failure)
+  const config = (agents[0].config as { tasks?: { name: string; status: string; result?: string; model_used?: string; use_mode?: string }[] }) || {};
+  const tasks = (config.tasks || []).map((t, i) => ({
+    index: i,
+    name: t.name,
+    status: t.status,
+    result: t.result || null,
+    model_used: t.model_used || null,
+    use_mode: t.use_mode || null,
+  }));
+
   return NextResponse.json({
+    agent_type: agents[0].agent_type,
+    agent_status: agents[0].agent_status,
+    tasks,
     reports: reports.map((r) => ({
       task_name: r.task_name,
       summary: r.summary,

@@ -371,6 +371,7 @@ export default function BillingPage() {
                     { service: "openai", name: "OpenAI" },
                     { service: "anthropic", name: "Anthropic" },
                     { service: "google", name: "Google Gemini" },
+                    { service: "alibaba", name: "Alibaba Qwen" },
                     { service: "vercel", name: "Vercel AI Gateway" },
                     { service: "clawhub", name: "ClawHub" },
                     { service: "twitter", name: "X (Twitter)", multi: ["twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret"] },

@@ -54,6 +54,25 @@ interface TokenUsageEntry {
   total_tokens: number;
 }
 
+interface TaskStatusByProject {
+  project: string;
+  pending: number;
+  processing: number;
+  completed: number;
+  total: number;
+}
+
+interface DbKpisByProject {
+  project: string;
+  leadsGenerated: number;
+  contentPublished: number;
+}
+
+interface BrevoContactsByProject {
+  project: string;
+  contacts: number;
+}
+
 interface MetricsSummary {
   totalTraffic: number;
   emailsSent: number;
@@ -64,6 +83,58 @@ interface MetricsSummary {
 }
 
 const CHART_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#14b8a6"];
+const TRAFFIC_FILTER_STORAGE_PREFIX = "reports:traffic:selectedProjects";
+
+function ProjectPieChart({ title, slices }: { title: string; slices: { label: string; value: number; color: string }[] }) {
+  const total = slices.reduce((sum, s) => sum + s.value, 0);
+  if (total <= 0) {
+    return (
+      <div className="bg-white rounded-lg border border-gray-200 p-4">
+        <h3 className="text-sm font-semibold mb-3">{title}</h3>
+        <div className="h-56 flex items-center justify-center rounded border border-dashed border-gray-200 text-xs text-gray-400">
+          No data yet
+        </div>
+      </div>
+    );
+  }
+
+  const gradient = slices
+    .reduce<{ offset: number; parts: string[] }>(
+      (acc, s) => {
+        const nextOffset = acc.offset + (s.value / total) * 100;
+        return {
+          offset: nextOffset,
+          parts: [...acc.parts, `${s.color} ${acc.offset}% ${nextOffset}%`],
+        };
+      },
+      { offset: 0, parts: [] }
+    )
+    .parts.join(", ");
+
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <h3 className="text-sm font-semibold mb-3">{title}</h3>
+      <div className="flex items-center gap-4">
+        <div
+          className="w-56 h-56 rounded-full shrink-0 border border-gray-200"
+          style={{ backgroundImage: `conic-gradient(${gradient})` }}
+          title={`${title}: ${total.toLocaleString()}`}
+        />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          {slices.map((s) => (
+            <div key={s.label} className="flex items-center justify-between gap-2 text-xs">
+              <span className="inline-flex items-center gap-1.5 text-gray-600 min-w-0">
+                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                <span className="truncate">{s.label}</span>
+              </span>
+              <span className="text-gray-800 font-medium">{s.value.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function CombinedTrafficChart({ projects, locale, colorMap }: { projects: ProjectTraffic[]; locale: string; colorMap?: Record<string, string> }) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -423,10 +494,18 @@ export default function ReportsPage() {
   const [selectedProjects, setSelectedProjects] = useState<Set<string>>(new Set());
   const [tokenUsage, setTokenUsage] = useState<TokenUsageEntry[]>([]);
   const [tokenSummary, setTokenSummary] = useState({ totalTokens: 0, promptTokens: 0, completionTokens: 0 });
+  const [tasksCompleted, setTasksCompleted] = useState(0);
+  const [taskStatusByProject, setTaskStatusByProject] = useState<TaskStatusByProject[]>([]);
+  const [dbKpisByProject, setDbKpisByProject] = useState<DbKpisByProject[]>([]);
+  const [brevoContactsByProject, setBrevoContactsByProject] = useState<BrevoContactsByProject[]>([]);
   const [userPlan, setUserPlan] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
+  const [isFilterSettingsOpen, setIsFilterSettingsOpen] = useState(false);
+  const [projectFilterQuery, setProjectFilterQuery] = useState("");
+  const trafficFilterStorageKey = user ? `${TRAFFIC_FILTER_STORAGE_PREFIX}:${user.sub || user.email || "default"}` : "";
 
   useEffect(() => {
     if (!user) return;
@@ -440,11 +519,40 @@ export default function ReportsPage() {
         if (data.brevoCampaigns) setBrevoCampaigns(data.brevoCampaigns);
         if (data.gaStats) setGaStats(data.gaStats);
         if (data.gaProjects) {
-          setGaProjects(data.gaProjects);
-          setSelectedProjects(new Set(data.gaProjects.map((p: ProjectTraffic) => p.project)));
+          const projects = data.gaProjects as ProjectTraffic[];
+          setGaProjects(projects);
+          const availableProjectNames = projects.map((p) => p.project);
+          const nextSelectedProjects = new Set(availableProjectNames);
+
+          if (trafficFilterStorageKey) {
+            try {
+              const raw = window.localStorage.getItem(trafficFilterStorageKey);
+              if (raw) {
+                const saved = JSON.parse(raw) as unknown;
+                if (Array.isArray(saved)) {
+                  const validSelection = saved
+                    .filter((name): name is string => typeof name === "string" && availableProjectNames.includes(name));
+                  if (validSelection.length > 0) {
+                    validSelection.forEach((name) => nextSelectedProjects.add(name));
+                    availableProjectNames.forEach((name) => {
+                      if (!validSelection.includes(name)) nextSelectedProjects.delete(name);
+                    });
+                  }
+                }
+              }
+            } catch {
+              // Ignore malformed localStorage payloads and fall back to all selected.
+            }
+          }
+
+          setSelectedProjects(nextSelectedProjects);
         }
         if (data.tokenUsage) setTokenUsage(data.tokenUsage);
         if (data.tokenSummary) setTokenSummary(data.tokenSummary);
+        if (typeof data.tasksCompleted === "number") setTasksCompleted(data.tasksCompleted);
+        if (Array.isArray(data.taskStatusByProject)) setTaskStatusByProject(data.taskStatusByProject);
+        if (Array.isArray(data.dbKpisByProject)) setDbKpisByProject(data.dbKpisByProject);
+        if (Array.isArray(data.brevoContactsByProject)) setBrevoContactsByProject(data.brevoContactsByProject);
       })
       .finally(() => setLoading(false));
     setAuditLoading(true);
@@ -452,7 +560,15 @@ export default function ReportsPage() {
       .then((r) => r.json())
       .then((data) => setAuditLogs(data.logs || []))
       .finally(() => setAuditLoading(false));
-  }, [user, locale]);
+  }, [user, locale, trafficFilterStorageKey]);
+
+  useEffect(() => {
+    if (!trafficFilterStorageKey || gaProjects.length === 0) return;
+    const selected = gaProjects
+      .map((p) => p.project)
+      .filter((projectName) => selectedProjects.has(projectName));
+    window.localStorage.setItem(trafficFilterStorageKey, JSON.stringify(selected));
+  }, [gaProjects, selectedProjects, trafficFilterStorageKey]);
 
   const agentMetrics = reports.reduce(
     (acc, r) => {
@@ -464,14 +580,104 @@ export default function ReportsPage() {
     },
     { leadsGenerated: 0, contentPublished: 0, tasksCompleted: 0 }
   );
+  const dbLeadsGeneratedTotal = dbKpisByProject.reduce((sum, r) => sum + (r.leadsGenerated || 0), 0);
+  const dbContentPublishedTotal = dbKpisByProject.reduce((sum, r) => sum + (r.contentPublished || 0), 0);
   const metrics: MetricsSummary = {
     totalTraffic: gaStats.pageViews,
     emailsSent: brevoStats.emailsSent,
     emailsFound: brevoStats.opened,
-    leadsGenerated: agentMetrics.leadsGenerated,
-    contentPublished: agentMetrics.contentPublished,
-    tasksCompleted: agentMetrics.tasksCompleted,
+    leadsGenerated: dbLeadsGeneratedTotal || agentMetrics.leadsGenerated,
+    contentPublished: dbContentPublishedTotal || agentMetrics.contentPublished,
+    tasksCompleted: tasksCompleted || agentMetrics.tasksCompleted,
   };
+
+  const allProjectNames = gaProjects.map((p) => p.project);
+  const selectedProjectCount = allProjectNames.filter((name) => selectedProjects.has(name)).length;
+  const visibleGaProjects = gaProjects.filter((p) => selectedProjects.has(p.project) && p.status === "ok");
+  const projectFilterKeyword = projectFilterQuery.trim().toLowerCase();
+  const filterableProjects = projectFilterKeyword
+    ? gaProjects.filter((p) => p.project.toLowerCase().includes(projectFilterKeyword))
+    : gaProjects;
+  const selectedCountLabel = tr.filtersSelected.replace("{count}", String(selectedProjectCount));
+
+  type ProjectMetricKey = "traffic" | "emailsSent" | "emailsOpened" | "leadsGenerated" | "contentPublished" | "tasks";
+  type ProjectMetricBucket = Record<ProjectMetricKey, number>;
+  const projectMetricMap: Record<string, ProjectMetricBucket> = {};
+  const ensureProjectMetrics = (projectName: string) => {
+    if (!projectMetricMap[projectName]) {
+      projectMetricMap[projectName] = {
+        traffic: 0,
+        emailsSent: 0,
+        emailsOpened: 0,
+        leadsGenerated: 0,
+        contentPublished: 0,
+        tasks: 0,
+      };
+    }
+    return projectMetricMap[projectName];
+  };
+
+  for (const p of gaProjects) {
+    const bucket = ensureProjectMetrics(p.project);
+    bucket.traffic += p.data.reduce((sum, d) => sum + d.pageViews, 0);
+  }
+  for (const c of brevoCampaigns) {
+    const bucket = ensureProjectMetrics(c.project);
+    bucket.emailsSent += c.sent || 0;
+    bucket.emailsOpened += c.opened || 0;
+  }
+  if (dbKpisByProject.length > 0) {
+    for (const row of dbKpisByProject) {
+      const bucket = ensureProjectMetrics(row.project);
+      bucket.leadsGenerated += row.leadsGenerated || 0;
+      bucket.contentPublished += row.contentPublished || 0;
+    }
+  } else {
+    for (const r of reports) {
+      const bucket = ensureProjectMetrics(r.project);
+      const m = r.metrics || {};
+      bucket.leadsGenerated += Number(m.leads || m.leads_generated || m.prospects || m.crm_leads || m.subscribers || 0);
+      bucket.contentPublished += Number(m.articles || m.posts_published || m.content || m.prs_created || 0);
+    }
+  }
+  for (const row of brevoContactsByProject) {
+    const bucket = ensureProjectMetrics(row.project || "Unknown");
+    bucket.leadsGenerated += row.contacts || 0;
+  }
+  for (const t of taskStatusByProject) {
+    const bucket = ensureProjectMetrics(t.project);
+    bucket.tasks += t.total || 0;
+  }
+
+  const pieProjectNames = Object.keys(projectMetricMap).sort();
+  const pieProjectColorMap = Object.fromEntries(
+    pieProjectNames.map((name, idx) => [name, CHART_COLORS[idx % CHART_COLORS.length]])
+  );
+
+  const buildPieSlices = (metric: ProjectMetricKey) => {
+    const entries = pieProjectNames
+      .map((name) => ({
+        label: name,
+        value: projectMetricMap[name][metric],
+        color: pieProjectColorMap[name] as string,
+      }))
+      .filter((e) => e.value > 0)
+      .sort((a, b) => b.value - a.value);
+    if (entries.length <= 7) return entries;
+    const top = entries.slice(0, 7);
+    const rest = entries.slice(7).reduce((sum, e) => sum + e.value, 0);
+    if (rest > 0) top.push({ label: "Others", value: rest, color: "#9ca3af" });
+    return top;
+  };
+
+  const projectPieCharts = [
+    { key: "traffic", title: tr.totalTraffic, slices: buildPieSlices("traffic") },
+    { key: "emailsSent", title: tr.emailsSent, slices: buildPieSlices("emailsSent") },
+    { key: "emailsOpened", title: tr.emailsOpened, slices: buildPieSlices("emailsOpened") },
+    { key: "leadsGenerated", title: tr.leadsGenerated, slices: buildPieSlices("leadsGenerated") },
+    { key: "contentPublished", title: tr.contentPublished, slices: buildPieSlices("contentPublished") },
+    { key: "tasks", title: tr.tasksCompleted, slices: buildPieSlices("tasks") },
+  ];
 
   if (userLoading) {
     return (
@@ -525,87 +731,130 @@ export default function ReportsPage() {
               </div>
             </section>
 
+            {(gaProjects.length > 0 || tokenUsage.length > 0) && (
+              <div className="mb-8 grid grid-cols-1 2xl:grid-cols-2 gap-6 items-start">
             {gaProjects.length > 0 && (
-              <section className="mb-8">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                  <h2 className="text-lg font-semibold">{tr.websiteTraffic}</h2>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => {
-                        if (selectedProjects.size === gaProjects.length) {
-                          setSelectedProjects(new Set());
-                        } else {
-                          setSelectedProjects(new Set(gaProjects.map((p) => p.project)));
-                        }
-                      }}
-                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                        selectedProjects.size === gaProjects.length
-                          ? "bg-gray-800 text-white border-gray-800"
-                          : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
-                      }`}
-                    >
-                      {tr.all}
-                    </button>
-                    {gaProjects.map((p, idx) => {
-                      const color = CHART_COLORS[idx % CHART_COLORS.length];
-                      const isSelected = selectedProjects.has(p.project);
-                      const hasIssue = p.status === "error" || p.status === "no_data";
-                      return (
+              <section className="min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                      <h2 className="text-lg font-semibold">{tr.websiteTraffic}</h2>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">{selectedCountLabel}</span>
                         <button
-                          key={p.project}
-                          onClick={() => {
-                            const next = new Set(selectedProjects);
-                            if (next.has(p.project)) {
-                              next.delete(p.project);
-                            } else {
-                              next.add(p.project);
-                            }
-                            setSelectedProjects(next);
-                          }}
-                          className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                            isSelected
-                              ? "text-white border-transparent"
-                              : "bg-white text-gray-500 border-gray-300 hover:border-gray-400"
-                          } ${hasIssue ? "opacity-70" : ""}`}
-                          style={isSelected ? { backgroundColor: color, borderColor: color } : {}}
+                          onClick={() => setIsFilterSettingsOpen((v) => !v)}
+                          className="px-2.5 py-1 rounded-full text-xs font-medium border bg-white text-gray-600 border-gray-300 hover:border-gray-400 transition-colors"
                         >
-                          {p.project}{p.status === "error" ? " !" : p.status === "no_data" ? " *" : ""}
+                          {tr.filterSettings}
                         </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Show per-project status messages for error/no_data */}
-                {gaProjects.some((p) => p.status === "error" || p.status === "no_data") && (
-                  <div className="space-y-2 mb-4">
-                    {gaProjects.filter((p) => p.status === "error").map((p) => (
-                      <div key={p.project} className="flex items-center gap-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg px-3 py-2">
-                        <span className="font-medium">{p.project}:</span>
-                        <span>{p.error || tr.trafficError}</span>
                       </div>
-                    ))}
-                    {gaProjects.filter((p) => p.status === "no_data").map((p) => (
-                      <div key={p.project} className="flex items-center gap-2 text-sm bg-gray-50 text-gray-500 border border-gray-200 rounded-lg px-3 py-2">
-                        <span className="font-medium">{p.project}:</span>
-                        <span>{tr.trafficNoData}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
 
-                {gaProjects.some((p) => selectedProjects.has(p.project) && p.status === "ok") && (
-                  <CombinedTrafficChart
-                    projects={gaProjects.filter((p) => selectedProjects.has(p.project) && p.status === "ok")}
-                    locale={locale}
-                    colorMap={Object.fromEntries(gaProjects.map((p, i) => [p.project, CHART_COLORS[i % CHART_COLORS.length]]))}
-                  />
-                )}
+                    {isFilterSettingsOpen && (
+                      <div className="mb-4 bg-white border border-gray-200 rounded-lg p-3 sm:p-4 space-y-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <input
+                            value={projectFilterQuery}
+                            onChange={(e) => setProjectFilterQuery(e.target.value)}
+                            className="flex-1 border border-gray-300 rounded px-3 py-2 text-sm"
+                            placeholder={tr.searchProjects}
+                          />
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setSelectedProjects(new Set(gaProjects.map((p) => p.project)))}
+                              className="px-2.5 py-1.5 rounded text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                            >
+                              {tr.all}
+                            </button>
+                            <button
+                              onClick={() => setSelectedProjects(new Set())}
+                              className="px-2.5 py-1.5 rounded text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                            >
+                              {tr.clear}
+                            </button>
+                            <button
+                              onClick={() => setIsFilterSettingsOpen(false)}
+                              className="px-2.5 py-1.5 rounded text-xs font-medium border border-gray-300 text-gray-600 hover:border-gray-400 transition-colors"
+                            >
+                              {tr.close}
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="max-h-52 overflow-auto border border-gray-200 rounded-md divide-y divide-gray-100">
+                          {filterableProjects.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-gray-500">{tr.noProjectsMatch}</p>
+                          ) : (
+                            filterableProjects.map((p) => {
+                              const isSelected = selectedProjects.has(p.project);
+                              const issueTitle = p.status === "error"
+                                ? (p.error || tr.trafficError)
+                                : p.status === "no_data"
+                                ? tr.trafficNoData
+                                : "";
+                              return (
+                                <label
+                                  key={p.project}
+                                  className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer"
+                                  title={issueTitle}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => {
+                                      setSelectedProjects((prev) => {
+                                        const next = new Set(prev);
+                                        if (next.has(p.project)) next.delete(p.project);
+                                        else next.add(p.project);
+                                        return next;
+                                      });
+                                    }}
+                                  />
+                                  <span className="flex-1 truncate">{p.project}</span>
+                                  {p.status === "error" && <span className="text-red-600 text-xs">!</span>}
+                                  {p.status === "no_data" && <span className="text-amber-600 text-xs">⚠</span>}
+                                </label>
+                              );
+                            })
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Show full messages only for hard errors; no_data stays as compact chip icon */}
+                    {gaProjects.some((p) => p.status === "error" && !dismissedAlerts.has(p.project)) && (
+                      <div className="space-y-2 mb-4">
+                        {gaProjects.filter((p) => p.status === "error" && !dismissedAlerts.has(p.project)).map((p) => (
+                          <div key={p.project} className="flex items-center gap-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded-lg px-3 py-2">
+                            <span className="font-medium">{p.project}:</span>
+                            <span className="flex-1">{p.error || tr.trafficError}</span>
+                            <button
+                              onClick={() => setDismissedAlerts((prev) => new Set(prev).add(p.project))}
+                              className="ml-auto text-red-400 hover:text-red-600 transition-colors p-0.5"
+                              aria-label="Dismiss"
+                            >
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {visibleGaProjects.length > 0 && (
+                      <CombinedTrafficChart
+                        projects={visibleGaProjects}
+                        locale={locale}
+                        colorMap={Object.fromEntries(gaProjects.map((p, i) => [p.project, CHART_COLORS[i % CHART_COLORS.length]]))}
+                      />
+                    )}
+                    {visibleGaProjects.length === 0 && (
+                      <p className="text-sm text-gray-500">{tr.noProjectsSelected}</p>
+                    )}
               </section>
             )}
 
             {tokenUsage.length > 0 && (
-              <section className="mb-8">
+              <section className="min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
                   <h2 className="text-lg font-semibold">{tr.tokenUsage}</h2>
                   <div className="flex gap-3 text-sm">
@@ -621,6 +870,19 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 <TokenUsageChart data={tokenUsage} locale={locale} />
+              </section>
+            )}
+              </div>
+            )}
+
+            {projectPieCharts.length > 0 && (
+              <section className="mb-8">
+                <h2 className="text-lg font-semibold mb-4">{tr.project} KPI</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {projectPieCharts.map((chart) => (
+                    <ProjectPieChart key={chart.key} title={chart.title} slices={chart.slices} />
+                  ))}
+                </div>
               </section>
             )}
 

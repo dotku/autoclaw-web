@@ -74,11 +74,17 @@ export default function SettingsPage() {
   const [byokLabelInput, setByokLabelInput] = useState("");
   const [byokSaving, setByokSaving] = useState(false);
   const [byokMsg, setByokMsg] = useState("");
+  const [platformKeys, setPlatformKeys] = useState<{ id: number; key_prefix: string; name: string | null; scopes: string[]; last_used_at: string | null; expires_at: string | null; created_at: string; revoked_at: string | null }[]>([]);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyScopes, setNewKeyScopes] = useState<string[]>(["read", "write"]);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [newKeyResult, setNewKeyResult] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     projects: true,
     language: true,
     org: true,
     byok: true,
+    apikeys: true,
   });
 
   useEffect(() => {
@@ -98,7 +104,7 @@ export default function SettingsPage() {
       });
     fetch("/api/api-keys")
       .then((r) => r.json())
-      .then((data) => setApiKeys(data.keys || []));
+      .then((data) => { setApiKeys(data.keys || []); setPlatformKeys(data.platformKeys || []); });
   }, [user]);
 
   function loadOrgMembers(orgId: number) {
@@ -192,10 +198,10 @@ export default function SettingsPage() {
         {/* Settings Index Navigation */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
-            { key: "projects", icon: "M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z", label: ts.projectsTitle, count: projects.length },
             { key: "language", icon: "M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129", label: ts.language },
             { key: "org", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z", label: ts.orgTitle, count: orgs.length },
-            { key: "byok", icon: "M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z", label: ts.byokTitle, count: apiKeys.length },
+            { key: "byok", icon: "M6 8h12l1 11a2 2 0 01-2 2H7a2 2 0 01-2-2L6 8zm3 0V6a3 3 0 016 0v2m-6 0h6", label: ts.byokTitle, count: apiKeys.length },
+            { key: "apikeys", icon: "M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4", label: ts.apiKeysTitle || "API Keys", count: platformKeys.filter((k) => !k.revoked_at).length },
           ].map((item) => (
             <button
               key={item.key}
@@ -220,264 +226,20 @@ export default function SettingsPage() {
 
         {/* Project Management */}
         <div id="section-projects" className="bg-white rounded-lg border border-gray-200 mb-6 overflow-hidden">
-          <button
-            onClick={() => setCollapsed((prev) => ({ ...prev, projects: !prev.projects }))}
-            className="w-full flex items-center justify-between p-6 cursor-pointer hover:bg-gray-50 transition-colors"
-          >
-            <div className="text-left">
-              <h2 className="text-lg font-semibold">{ts.projectsTitle}</h2>
-              <p className="text-sm text-gray-500">{ts.projectsDesc}</p>
+          <div className="p-6">
+            <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold">{ts.projectsTitle}</h2>
+                <p className="text-sm text-gray-500">{ts.projectsDesc}</p>
+              </div>
+              <Link
+                href={`/${locale}/dashboard/projects`}
+                className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-red-800 text-white text-sm font-medium hover:bg-red-900"
+              >
+                {ts.projectsTitle}
+              </Link>
             </div>
-            <svg className={`w-5 h-5 text-gray-400 transition-transform ${collapsed.projects ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {!collapsed.projects && <div className="px-6 pb-6 border-t border-gray-100 pt-4">
-
-          {projects.length === 0 ? (
-            <p className="text-sm text-gray-400">{ts.noProjects}</p>
-          ) : (
-            <div className="space-y-4">
-              {projects.map((project) => (
-                <div key={project.id} className="border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    {editingId === project.id ? (
-                      <input
-                        type="text"
-                        value={editForm.name}
-                        onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                        className="font-semibold text-sm px-2 py-1 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
-                      />
-                    ) : (
-                      <h3 className="font-semibold text-sm">{project.name}</h3>
-                    )}
-                    <div className="flex items-center gap-2">
-                      {projectSaved === project.id && (
-                        <span className="text-xs text-green-600">{ts.saved}</span>
-                      )}
-                      {editingId === project.id ? (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => saveProject(project.id)}
-                            disabled={projectSaving}
-                            className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
-                          >
-                            {projectSaving ? "..." : tc.save}
-                          </button>
-                          <button
-                            onClick={() => setEditingId(null)}
-                            className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 transition-colors cursor-pointer"
-                          >
-                            {tc.cancel}
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => startEdit(project)}
-                          className="text-xs text-red-600 hover:text-red-800 transition-colors cursor-pointer"
-                        >
-                          {ts.edit}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {editingId === project.id ? (
-                    <div className="space-y-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">{ts.website}</label>
-                        <input
-                          type="url"
-                          value={editForm.website}
-                          onChange={(e) => setEditForm({ ...editForm, website: e.target.value })}
-                          placeholder="https://example.com"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">{ts.gaPropertyId}</label>
-                        <input
-                          type="text"
-                          value={editForm.ga_property_id}
-                          onChange={(e) => setEditForm({ ...editForm, ga_property_id: e.target.value })}
-                          placeholder="e.g. 526614012"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
-                        />
-                        <p className="text-xs text-gray-400 mt-1">{ts.gaPropertyIdHint}</p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">{ts.domain || "Work Domain"}</label>
-                        <input
-                          type="text"
-                          value={editForm.domain}
-                          onChange={(e) => setEditForm({ ...editForm, domain: e.target.value })}
-                          placeholder="e.g. usproglove.com"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
-                        />
-                        <p className="text-xs text-gray-400 mt-1">{ts.domainHint || "All users with this email domain can access this project"}</p>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">{ts.description}</label>
-                        <textarea
-                          value={editForm.description}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                          rows={2}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none resize-none"
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
-                      <div>
-                        <span className="text-xs text-gray-400">{ts.website}</span>
-                        <p className="text-gray-700 truncate">{project.website || "-"}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-gray-400">{ts.gaPropertyId}</span>
-                        <p className="text-gray-700">{project.ga_property_id || "-"}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-gray-400">{ts.domain || "Work Domain"}</span>
-                        <p className="text-gray-700">{project.domain || "-"}</p>
-                      </div>
-                      <div>
-                        <span className="text-xs text-gray-400">{ts.description}</span>
-                        <p className="text-gray-700 truncate">{project.description || "-"}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Project Team Members */}
-                  {(() => {
-                    const projectMembers = teamMembers.filter((m) => m.project_ids?.includes(project.id));
-                    const isOwner = projectMembers.some((m) => m.email === user?.email && m.project_role === "owner");
-                    const canManage = isOwner || userRole === "admin";
-                    return (
-                      <div className="mt-3 pt-3 border-t border-gray-100">
-                        <h4 className="text-xs font-semibold text-gray-500 mb-2">{ts.teamTitle || "Team Members"}</h4>
-                        {projectMembers.length > 0 && (
-                          <div className="overflow-x-auto mb-2">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-200 text-left">
-                                  <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamEmail || "Email"}</th>
-                                  <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamName || "Name"}</th>
-                                  <th className="pb-2 pr-4 font-medium text-gray-500 text-xs">{ts.teamRole || "Role"}</th>
-                                  <th className="pb-2 font-medium text-gray-500 text-xs"></th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {projectMembers.map((member) => {
-                                  const memberIsOwner = member.project_role === "owner";
-                                  const isSelf = member.email === user?.email;
-                                  const roleColors: Record<string, string> = {
-                                    owner: "bg-red-100 text-red-800",
-                                    admin: "bg-purple-100 text-purple-800",
-                                    operator: "bg-blue-100 text-blue-700",
-                                    viewer: "bg-gray-100 text-gray-600",
-                                    member: "bg-gray-100 text-gray-600",
-                                    domain: "bg-green-100 text-green-700",
-                                  };
-                                  const canEdit = canManage && !memberIsOwner && !isSelf;
-                                  return (
-                                    <tr key={member.email} className="border-b border-gray-100">
-                                      <td className="py-2 pr-4 text-gray-700">{member.email}</td>
-                                      <td className="py-2 pr-4 text-gray-500">{member.name || "-"}</td>
-                                      <td className="py-2 pr-4">
-                                        {canEdit ? (
-                                          <select
-                                            value={member.project_role}
-                                            onChange={async (e) => {
-                                              const newRole = e.target.value;
-                                              await fetch("/api/team-members", {
-                                                method: "PUT",
-                                                headers: { "Content-Type": "application/json" },
-                                                body: JSON.stringify({ project_id: project.id, member_email: member.email, role: newRole }),
-                                              });
-                                              setTeamMembers((prev) => prev.map((m) => m.email === member.email ? { ...m, project_role: newRole } : m));
-                                            }}
-                                            className="text-xs font-medium px-2 py-1 rounded border border-gray-200 outline-none cursor-pointer"
-                                          >
-                                            <option value="admin">Admin</option>
-                                            <option value="operator">Operator</option>
-                                            <option value="viewer">Viewer</option>
-                                          </select>
-                                        ) : (
-                                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${roleColors[member.project_role] || "bg-gray-100 text-gray-600"}`}>
-                                            {member.project_role}
-                                          </span>
-                                        )}
-                                      </td>
-                                      <td className="py-2">
-                                        {canEdit && (
-                                          <button
-                                            onClick={async () => {
-                                              if (!confirm(`Remove ${member.email}?`)) return;
-                                              await fetch(`/api/team-members?project_id=${project.id}&member_email=${encodeURIComponent(member.email)}`, { method: "DELETE" });
-                                              setTeamMembers((prev) => prev.filter((m) => m.email !== member.email));
-                                            }}
-                                            className="text-xs text-red-500 hover:text-red-700 transition-colors cursor-pointer"
-                                          >
-                                            {tc.remove}
-                                          </button>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                        {canManage && (
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <input
-                              type="email"
-                              value={projectInviteEmail[project.id] || ""}
-                              onChange={(e) => setProjectInviteEmail((prev) => ({ ...prev, [project.id]: e.target.value }))}
-                              placeholder={ts.invitePlaceholder || "colleague@company.com"}
-                              className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none"
-                            />
-                            <button
-                              onClick={async () => {
-                                const email = projectInviteEmail[project.id];
-                                if (!email) return;
-                                setProjectInviting((prev) => ({ ...prev, [project.id]: true }));
-                                try {
-                                  const res = await fetch("/api/team-members", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ email, project_id: project.id }),
-                                  });
-                                  const data = await res.json();
-                                  if (res.ok) {
-                                    setProjectInviteMsg((prev) => ({ ...prev, [project.id]: ts.inviteSuccess || "Added!" }));
-                                    setProjectInviteEmail((prev) => ({ ...prev, [project.id]: "" }));
-                                    fetch("/api/team-members").then((r) => r.json()).then((d) => setTeamMembers(d.members || []));
-                                  } else {
-                                    setProjectInviteMsg((prev) => ({ ...prev, [project.id]: data.error || "Failed" }));
-                                  }
-                                } finally {
-                                  setProjectInviting((prev) => ({ ...prev, [project.id]: false }));
-                                  setTimeout(() => setProjectInviteMsg((prev) => ({ ...prev, [project.id]: "" })), 3000);
-                                }
-                              }}
-                              disabled={projectInviting[project.id] || !projectInviteEmail[project.id]}
-                              className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                            >
-                              {projectInviting[project.id] ? "..." : (ts.inviteBtn || "Invite")}
-                            </button>
-                          </div>
-                        )}
-                        {projectInviteMsg[project.id] && <p className="text-sm text-green-600 mt-1">{projectInviteMsg[project.id]}</p>}
-                      </div>
-                    );
-                  })()}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>}
+          </div>
         </div>
 
         {/* Language Settings */}
@@ -966,7 +728,7 @@ export default function SettingsPage() {
         </div>}
         </div>
 
-        {/* API Keys (BYOK) */}
+        {/* Market */}
         <div id="section-byok" className="bg-white rounded-lg border border-gray-200 mb-6 overflow-hidden">
           <button
             onClick={() => setCollapsed((prev) => ({ ...prev, byok: !prev.byok }))}
@@ -987,9 +749,17 @@ export default function SettingsPage() {
               { service: "openai", name: ts.byokOpenai, hint: ts.byokOpenaiHint },
               { service: "anthropic", name: ts.byokAnthropic, hint: ts.byokAnthropicHint },
               { service: "google", name: ts.byokGoogle, hint: ts.byokGoogleHint },
+              { service: "alibaba", name: ts.byokAlibaba, hint: ts.byokAlibabaHint },
               { service: "vercel", name: ts.byokVercel, hint: ts.byokVercelHint },
               { service: "clawhub", name: ts.byokClawhub, hint: ts.byokClawhubHint },
-            ] as const).map((svc) => {
+              { service: "brevo", name: ts.byokBravo, hint: ts.byokBrevoHint },
+              { service: "sendgrid", name: ts.byokSendGrid, hint: ts.byokSendGridHint },
+              ...(userPlan === "enterprise" || userPlan === "scale" ? [
+                { service: "apollo" as const, name: ts.byokApollo, hint: ts.byokApolloHint },
+                { service: "apify" as const, name: ts.byokApify, hint: ts.byokApifyHint },
+                { service: "hunter" as const, name: ts.byokHunter, hint: ts.byokHunterHint },
+              ] : []),
+            ] as { service: string; name: string; hint: string }[]).map((svc) => {
               const existing = apiKeys.find((k) => k.service === svc.service);
               const isEditing = byokEditing === svc.service;
 
@@ -1232,6 +1002,123 @@ export default function SettingsPage() {
               );
             })()}
 
+            {/* Snov.io - 2 keys grouped (enterprise/scale only) */}
+            {(userPlan === "enterprise" || userPlan === "scale") && (() => {
+              const snovKeys = [
+                { service: "snov_api_id" as const, name: ts.byokSnovApiId },
+                { service: "snov_api_secret" as const, name: ts.byokSnovApiSecret },
+              ];
+              const snovConfigured = snovKeys.filter((k) => apiKeys.some((a) => a.service === k.service));
+              const isEditingSnov = byokEditing === "snov";
+
+              return (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">{ts.byokSnov}</h3>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${snovConfigured.length === 2 ? "bg-green-100 text-green-800" : snovConfigured.length > 0 ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-500"}`}>
+                        {snovConfigured.length === 2 ? ts.byokMasked : snovConfigured.length > 0 ? `${snovConfigured.length}/2` : ts.byokNotSet}
+                      </span>
+                    </div>
+                    {!isEditingSnov && (
+                      <button
+                        onClick={() => { setByokEditing("snov"); setByokKeyInput(""); setByokLabelInput(""); }}
+                        className="text-xs text-red-600 hover:text-red-800 transition-colors cursor-pointer"
+                      >
+                        {snovConfigured.length > 0 ? ts.edit : ts.byokSave}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mb-2">{ts.byokSnovHint}</p>
+
+                  {!isEditingSnov && snovConfigured.length > 0 && (
+                    <div className="text-xs text-gray-500 space-y-0.5">
+                      {snovConfigured.map((sk) => (
+                        <div key={sk.service}>{sk.name}: ••••••••</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {isEditingSnov && (
+                    <div className="space-y-2 mt-2">
+                      {snovKeys.map((sk) => {
+                        const existing = apiKeys.find((k) => k.service === sk.service);
+                        return (
+                          <div key={sk.service}>
+                            <label className="text-xs text-gray-500 mb-0.5 block">{sk.name}</label>
+                            <input
+                              type="password"
+                              defaultValue=""
+                              placeholder={existing ? "••••••••  (leave blank to keep)" : ts.byokPlaceholder}
+                              data-snov-key={sk.service}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none font-mono"
+                            />
+                          </div>
+                        );
+                      })}
+                      <div className="flex gap-2 mt-1">
+                        <button
+                          onClick={async () => {
+                            setByokSaving(true);
+                            let saved = false;
+                            for (const sk of snovKeys) {
+                              const input = document.querySelector<HTMLInputElement>(`[data-snov-key="${sk.service}"]`);
+                              const val = input?.value?.trim();
+                              if (val) {
+                                await fetch("/api/api-keys", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "upsert", service: sk.service, api_key: val }),
+                                });
+                                saved = true;
+                              }
+                            }
+                            if (saved) {
+                              setByokMsg(ts.byokSaved);
+                              setByokEditing(null);
+                              const data = await fetch("/api/api-keys").then((r) => r.json());
+                              setApiKeys(data.keys || []);
+                            }
+                            setByokSaving(false);
+                          }}
+                          disabled={byokSaving}
+                          className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {byokSaving ? "..." : ts.byokSave}
+                        </button>
+                        <button
+                          onClick={() => setByokEditing(null)}
+                          className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 cursor-pointer"
+                        >
+                          {tc.cancel}
+                        </button>
+                        {snovConfigured.length > 0 && (
+                          <button
+                            onClick={async () => {
+                              for (const sk of snovKeys) {
+                                await fetch("/api/api-keys", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "delete", service: sk.service }),
+                                });
+                              }
+                              setByokMsg(ts.byokDeleted);
+                              setByokEditing(null);
+                              const data = await fetch("/api/api-keys").then((r) => r.json());
+                              setApiKeys(data.keys || []);
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded border border-red-200 transition-colors cursor-pointer"
+                          >
+                            {ts.byokDelete}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* Cloudflare Worker - 2 keys grouped */}
             {(() => {
               const workerKeys = [
@@ -1366,6 +1253,165 @@ export default function SettingsPage() {
           </div>
           {byokMsg && <p className="text-sm text-green-600 mt-3">{byokMsg}</p>}
         </div>}
+        </div>
+
+        {/* ── Platform API Keys ── */}
+        <div id="section-apikeys" className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <button
+            onClick={() => setCollapsed((prev) => ({ ...prev, apikeys: !prev.apikeys }))}
+            className="w-full px-6 py-4 flex items-center justify-between cursor-pointer hover:bg-gray-50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+              </svg>
+              <h2 className="text-lg font-semibold">{ts.apiKeysTitle || "Platform API Keys"}</h2>
+              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                {platformKeys.filter((k) => !k.revoked_at).length}
+              </span>
+            </div>
+            <svg className={`w-5 h-5 text-gray-400 transition-transform ${collapsed.apikeys ? "" : "rotate-180"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {!collapsed.apikeys && <div className="px-6 pb-6 space-y-4">
+            <p className="text-sm text-gray-500">{ts.apiKeysDesc || "Create API keys to access AutoClaw resources programmatically via the REST API."}</p>
+
+            {/* Show newly created key */}
+            {newKeyResult && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-green-800 mb-2">{ts.apiKeyCreated || "API key created! Copy it now — it won't be shown again."}</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-white border border-green-300 rounded px-3 py-2 text-sm font-mono break-all select-all">{newKeyResult}</code>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(newKeyResult); }}
+                    className="px-3 py-2 text-sm bg-green-700 text-white rounded hover:bg-green-800 cursor-pointer shrink-0"
+                  >
+                    {ts.copy || "Copy"}
+                  </button>
+                </div>
+                <button
+                  onClick={() => setNewKeyResult(null)}
+                  className="text-xs text-green-600 mt-2 cursor-pointer hover:text-green-800"
+                >
+                  {ts.apiKeyDismiss || "I've copied it, dismiss"}
+                </button>
+              </div>
+            )}
+
+            {/* Create new key form */}
+            <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+              <h3 className="text-sm font-medium">{ts.apiKeyCreate || "Create new key"}</h3>
+              <div className="flex flex-wrap gap-3 items-end">
+                <div className="flex-1 min-w-[150px]">
+                  <label className="text-xs text-gray-500 block mb-1">{ts.apiKeyName || "Name"}</label>
+                  <input
+                    type="text"
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    placeholder={ts.apiKeyNamePlaceholder || "e.g. My App"}
+                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 block mb-1">{ts.apiKeyScopes || "Scopes"}</label>
+                  <div className="flex gap-2">
+                    {["read", "write", "admin"].map((s) => (
+                      <label key={s} className="flex items-center gap-1 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newKeyScopes.includes(s)}
+                          onChange={(e) => {
+                            if (e.target.checked) setNewKeyScopes((prev) => [...prev, s]);
+                            else setNewKeyScopes((prev) => prev.filter((x) => x !== s));
+                          }}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="capitalize">{s}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    setCreatingKey(true);
+                    try {
+                      const res = await fetch("/api/api-keys", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: "create", name: newKeyName || null, scopes: newKeyScopes }),
+                      });
+                      const data = await res.json();
+                      if (data.key) {
+                        setNewKeyResult(data.key);
+                        setNewKeyName("");
+                        // Refresh list
+                        const refreshed = await fetch("/api/api-keys").then((r) => r.json());
+                        setPlatformKeys(refreshed.platformKeys || []);
+                      }
+                    } finally {
+                      setCreatingKey(false);
+                    }
+                  }}
+                  disabled={creatingKey || newKeyScopes.length === 0}
+                  className="px-4 py-1.5 text-sm bg-red-800 text-white rounded-md hover:bg-red-900 disabled:opacity-50 cursor-pointer"
+                >
+                  {creatingKey ? tc.loading : ts.apiKeyGenerate || "Generate Key"}
+                </button>
+              </div>
+            </div>
+
+            {/* Existing keys list */}
+            {platformKeys.length > 0 && (
+              <div className="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+                {platformKeys.map((pk) => (
+                  <div key={pk.id} className={`px-4 py-3 flex items-center justify-between ${pk.revoked_at ? "opacity-50 bg-gray-50" : "bg-white"}`}>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <code className="text-sm font-mono text-gray-700">{pk.key_prefix}...</code>
+                        {pk.name && <span className="text-sm text-gray-600">{pk.name}</span>}
+                        {pk.revoked_at && <span className="text-xs bg-red-100 text-red-600 px-1.5 py-0.5 rounded">{ts.apiKeyRevoked || "Revoked"}</span>}
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
+                        <span>{(pk.scopes || []).join(", ")}</span>
+                        <span>{ts.apiKeyCreatedAt || "Created"}: {new Date(pk.created_at).toLocaleDateString()}</span>
+                        {pk.last_used_at && <span>{ts.apiKeyLastUsed || "Last used"}: {new Date(pk.last_used_at).toLocaleDateString()}</span>}
+                        {pk.expires_at && <span>{ts.apiKeyExpires || "Expires"}: {new Date(pk.expires_at).toLocaleDateString()}</span>}
+                      </div>
+                    </div>
+                    {!pk.revoked_at && (
+                      <button
+                        onClick={async () => {
+                          if (!confirm(ts.apiKeyRevokeConfirm || "Revoke this API key? This action cannot be undone.")) return;
+                          await fetch("/api/api-keys", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ action: "revoke", key_id: pk.id }),
+                          });
+                          const refreshed = await fetch("/api/api-keys").then((r) => r.json());
+                          setPlatformKeys(refreshed.platformKeys || []);
+                        }}
+                        className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded border border-red-200 cursor-pointer shrink-0"
+                      >
+                        {ts.apiKeyRevoke || "Revoke"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {platformKeys.length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-4">{ts.apiKeyNone || "No API keys yet. Create one to get started."}</p>
+            )}
+
+            {/* API docs hint */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p className="text-xs text-blue-700">
+                {ts.apiKeyDocsHint || "Use your API key with"} <code className="bg-blue-100 px-1 rounded">Authorization: Bearer ac_live_...</code> {ts.apiKeyDocsHint2 || "to access"} <code className="bg-blue-100 px-1 rounded">/api/v1/*</code> {ts.apiKeyDocsHint3 || "endpoints."}
+              </p>
+            </div>
+          </div>}
         </div>
 
       </div>

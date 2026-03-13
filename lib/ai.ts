@@ -1,6 +1,7 @@
 const CEREBRAS_API_KEY = process.env.CEREBRAS_API_KEY;
 const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY;
 const GOOGLE_AI_API = process.env.GOOGLE_AI_API;
+const ALIBABA_AI_BASE_URL = process.env.ALIBABA_AI_BASE_URL || "https://dashscope-intl.aliyuncs.com/compatible-mode/v1";
 
 interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -18,6 +19,7 @@ export interface ByokKeys {
   openai?: string;
   anthropic?: string;
   google?: string;
+  alibaba?: string;
 }
 
 // ── Model Registry ──
@@ -42,6 +44,8 @@ export const AVAILABLE_MODELS: ModelInfo[] = [
   { id: "anthropic/claude-haiku", name: "Claude Haiku 3.5", provider: "anthropic", costPer1MInput: 80, costPer1MOutput: 400, requiresByok: "anthropic" },
   { id: "google/gemini-2.5-pro", name: "Gemini 2.5 Pro", provider: "google", costPer1MInput: 125, costPer1MOutput: 1000, requiresByok: "google" },
   { id: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", provider: "google", costPer1MInput: 15, costPer1MOutput: 60, requiresByok: "google" },
+  { id: "alibaba/qwen-plus", name: "Alibaba Qwen Plus", provider: "alibaba", costPer1MInput: 11.5, costPer1MOutput: 28.7, requiresByok: "alibaba" },
+  { id: "alibaba/qwen-turbo", name: "Alibaba Qwen Turbo", provider: "alibaba", costPer1MInput: 5, costPer1MOutput: 20, requiresByok: "alibaba" },
 ];
 
 export const DEFAULT_MODEL = "cerebras/gpt-oss-120b";
@@ -177,6 +181,8 @@ const MODEL_API_MAP: Record<string, string> = {
   "anthropic/claude-haiku": "claude-haiku-4-5-20251001",
   "google/gemini-2.5-pro": "gemini-2.5-pro",
   "google/gemini-2.5-flash": "gemini-2.5-flash",
+  "alibaba/qwen-plus": "qwen-plus",
+  "alibaba/qwen-turbo": "qwen-turbo",
 };
 
 export async function chatWithAI(messages: ChatMessage[], maxTokens = 500, byok?: ByokKeys, selectedModel?: string): Promise<AIResponse> {
@@ -202,6 +208,9 @@ export async function chatWithAI(messages: ChatMessage[], maxTokens = 500, byok?
       }
       if (provider === "anthropic" && byok?.anthropic) {
         return await callAnthropic(byok.anthropic, apiModel, messages, maxTokens);
+      }
+      if (provider === "alibaba" && byok?.alibaba) {
+        return await callOpenAICompatible(`${ALIBABA_AI_BASE_URL}/chat/completions`, byok.alibaba, apiModel, provider, messages, maxTokens);
       }
       // If the selected model can't be used, fall through to auto
     }
@@ -229,6 +238,14 @@ export async function chatWithAI(messages: ChatMessage[], maxTokens = 500, byok?
       return await callGoogle(byok.google, "gemini-2.0-flash", messages, maxTokens);
     } catch (e) {
       console.error("BYOK Google failed:", e);
+    }
+  }
+
+  if (byok?.alibaba) {
+    try {
+      return await callOpenAICompatible(`${ALIBABA_AI_BASE_URL}/chat/completions`, byok.alibaba, "qwen-turbo", "alibaba", messages, maxTokens);
+    } catch (e) {
+      console.error("BYOK Alibaba failed:", e);
     }
   }
 

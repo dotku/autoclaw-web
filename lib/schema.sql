@@ -216,6 +216,69 @@ INSERT INTO skills (key, category, sort_order) VALUES
   ('skillTaskScheduler', 'automation', 24)
 ON CONFLICT (key) DO NOTHING;
 
+-- CRM Contacts
+CREATE TABLE IF NOT EXISTS contacts (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  project_id INTEGER REFERENCES projects(id) ON DELETE SET NULL,
+  email VARCHAR(255) NOT NULL,
+  first_name VARCHAR(255),
+  last_name VARCHAR(255),
+  company VARCHAR(255),
+  position VARCHAR(255),
+  phone VARCHAR(50),
+  source VARCHAR(50) DEFAULT 'manual', -- 'manual', 'brevo', 'apollo', 'hunter', 'snov', 'import'
+  tags TEXT[] DEFAULT '{}',
+  notes TEXT,
+  brevo_id BIGINT,
+  emails_sent INTEGER DEFAULT 0,
+  emails_opened INTEGER DEFAULT 0,
+  emails_clicked INTEGER DEFAULT 0,
+  hard_bounces INTEGER DEFAULT 0,
+  soft_bounces INTEGER DEFAULT 0,
+  last_opened_at TIMESTAMP,
+  stats_synced_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(user_id, email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_contacts_user ON contacts(user_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_project ON contacts(project_id);
+CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email);
+
+-- Referral program
+CREATE TABLE IF NOT EXISTS referrals (
+  id SERIAL PRIMARY KEY,
+  referrer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  referred_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  referral_code VARCHAR(20) NOT NULL,
+  status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'signed_up', 'subscribed'
+  referred_email VARCHAR(255),
+  commission_rate NUMERIC DEFAULT 0.05, -- 5%
+  created_at TIMESTAMP DEFAULT NOW(),
+  converted_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS referral_commissions (
+  id SERIAL PRIMARY KEY,
+  referral_id INTEGER REFERENCES referrals(id) ON DELETE CASCADE,
+  referrer_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  amount NUMERIC NOT NULL, -- commission amount in cents
+  currency VARCHAR(3) DEFAULT 'usd',
+  payment_amount NUMERIC NOT NULL, -- original payment amount
+  status VARCHAR(20) DEFAULT 'pending', -- 'pending', 'paid', 'cancelled'
+  stripe_payment_id VARCHAR(255),
+  period VARCHAR(7), -- '2026-03'
+  created_at TIMESTAMP DEFAULT NOW(),
+  paid_at TIMESTAMP
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_referrals_code ON referrals(referral_code);
+CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id);
+CREATE INDEX IF NOT EXISTS idx_referrals_referred ON referrals(referred_id);
+CREATE INDEX IF NOT EXISTS idx_referral_commissions_referrer ON referral_commissions(referrer_id);
+
 -- User budget settings
 CREATE TABLE IF NOT EXISTS user_budgets (
   id SERIAL PRIMARY KEY,

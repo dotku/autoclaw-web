@@ -23,10 +23,23 @@ function detectProject(name: string): string {
   if (name.includes("gpulaw")) return "GPULaw";
   if (name.includes("medchat")) return "MedChat";
   if (name.includes("sienovo")) return "Sienovo";
-  if (name.includes("medtravel") || name.includes("dental") || name.includes("implant")) return "MedTravel";
+  if (
+    name.includes("medtravel") ||
+    name.includes("dental") ||
+    name.includes("implant")
+  )
+    return "MedTravel";
   if (name.includes("iris") || name.includes("limo")) return "Iris Limo";
-  if (name.includes("usproglove") || name.includes("proglove") || name.includes("glove") || name.includes("nitrile") || name.includes("ppe")) return "US ProGlove";
-  if (name.includes("dkwholesale") || name.includes("dk-wholesale")) return "DK Wholesale";
+  if (
+    name.includes("usproglove") ||
+    name.includes("proglove") ||
+    name.includes("glove") ||
+    name.includes("nitrile") ||
+    name.includes("ppe")
+  )
+    return "US ProGlove";
+  if (name.includes("dkwholesale") || name.includes("dk-wholesale"))
+    return "DK Wholesale";
   if (name.includes("xpilot") || name.includes("x-post")) return "xPilot";
   if (name.includes("unincore")) return "Unincore";
   if (name.includes("ouxi")) return "OUXI";
@@ -35,17 +48,64 @@ function detectProject(name: string): string {
 }
 
 function detectCategory(name: string): string {
-  if (name.includes("lead") || name.includes("prospect") || name.includes("scraper")) return "lead_generation";
-  if (name.includes("email") || name.includes("brevo") || name.includes("cold-email")) return "email_marketing";
-  if (name.includes("seo") || name.includes("blog") || name.includes("backlink") || name.includes("content-optimizer")) return "seo";
-  if (name.includes("tweet") || name.includes("x-") || name.includes("linkedin") || name.includes("marketing-tweet") || name.includes("community")) return "social_media";
-  if (name.includes("health") || name.includes("monitor") || name.includes("sre") || name.includes("site-report")) return "monitoring";
-  if (name.includes("standup") || name.includes("sprint") || name.includes("project-review")) return "project_mgmt";
+  if (
+    name.includes("lead") ||
+    name.includes("prospect") ||
+    name.includes("scraper")
+  )
+    return "lead_generation";
+  if (
+    name.includes("email") ||
+    name.includes("brevo") ||
+    name.includes("cold-email")
+  )
+    return "email_marketing";
+  if (
+    name.includes("seo") ||
+    name.includes("blog") ||
+    name.includes("backlink") ||
+    name.includes("content-optimizer")
+  )
+    return "seo";
+  if (
+    name.includes("tweet") ||
+    name.includes("x-") ||
+    name.includes("linkedin") ||
+    name.includes("marketing-tweet") ||
+    name.includes("community")
+  )
+    return "social_media";
+  if (
+    name.includes("health") ||
+    name.includes("monitor") ||
+    name.includes("sre") ||
+    name.includes("site-report")
+  )
+    return "monitoring";
+  if (
+    name.includes("standup") ||
+    name.includes("sprint") ||
+    name.includes("project-review")
+  )
+    return "project_mgmt";
   if (name.includes("product") || name.includes("analytics")) return "product";
-  if (name.includes("sales") || name.includes("followup") || name.includes("hubspot")) return "sales";
-  if (name.includes("dev") || name.includes("github") || name.includes("quality") || name.includes("security") || name.includes("dep-")) return "engineering";
+  if (
+    name.includes("sales") ||
+    name.includes("followup") ||
+    name.includes("hubspot")
+  )
+    return "sales";
+  if (
+    name.includes("dev") ||
+    name.includes("github") ||
+    name.includes("quality") ||
+    name.includes("security") ||
+    name.includes("dep-")
+  )
+    return "engineering";
   if (name.includes("ads") || name.includes("google-ads")) return "advertising";
-  if (name.includes("model-scout") || name.includes("integration")) return "research";
+  if (name.includes("model-scout") || name.includes("integration"))
+    return "research";
   return "other";
 }
 
@@ -56,7 +116,10 @@ function categorizeAgent(name: string): { category: string; project: string } {
 function extractMetrics(text: string): Record<string, number> {
   const metrics: Record<string, number> = {};
   const patterns: [RegExp, string][] = [
-    [/(\d+)\s*(?:new\s+)?leads?\s+(?:found|generated|imported|contacted|scraped)/i, "leads"],
+    [
+      /(\d+)\s*(?:new\s+)?leads?\s+(?:found|generated|imported|contacted|scraped)/i,
+      "leads",
+    ],
     [/(\d+)\s*emails?\s+sent/i, "emails_sent"],
     [/(\d+)\s*(?:contacts?|emails?)\s+found/i, "contacts_found"],
     [/(\d+)\s*tweets?\s+(?:posted|sent|published)/i, "tweets"],
@@ -90,12 +153,21 @@ function execAsync(command: string, timeout: number): Promise<string> {
   });
 }
 
-async function readOpenClawData(): Promise<{ jobs: CronJob[]; summaries: Record<string, string> }> {
+async function readOpenClawData(): Promise<{
+  jobs: CronJob[];
+  summaries: Record<string, string>;
+}> {
   try {
     // Run both Docker commands concurrently
     const [jobsRaw, summariesRaw] = await Promise.all([
-      execAsync("docker exec openclaw-gateway cat /home/node/.openclaw/cron/jobs.json", 5000),
-      execAsync("docker exec openclaw-gateway node /tmp/extract-sessions.js", 15000),
+      execAsync(
+        "docker exec openclaw-gateway cat /home/node/.openclaw/cron/jobs.json",
+        5000,
+      ),
+      execAsync(
+        "docker exec openclaw-gateway node /home/node/.openclaw/extract-sessions.js",
+        15000,
+      ),
     ]);
 
     if (!jobsRaw) return { jobs: [], summaries: {} };
@@ -126,7 +198,10 @@ const STATUS_FALLBACK: Record<string, Record<string, string>> = {
 function fallbackSummary(job: CronJob, locale: string): string {
   const durationSec = Math.round((job.state.lastDurationMs || 0) / 1000);
   const statusKey = job.state.lastStatus || "unknown";
-  const statusLabel = STATUS_FALLBACK[locale]?.[statusKey] || STATUS_FALLBACK.en[statusKey] || statusKey;
+  const statusLabel =
+    STATUS_FALLBACK[locale]?.[statusKey] ||
+    STATUS_FALLBACK.en[statusKey] ||
+    statusKey;
   if (locale === "zh") {
     return `\u72b6\u6001\uff1a${statusLabel}\u3002\u8017\u65f6\uff1a${durationSec}\u79d2\u3002`;
   }
@@ -135,19 +210,25 @@ function fallbackSummary(job: CronJob, locale: string): string {
 
 const PROJECT_ALIASES: Record<string, string[]> = {
   "Iris Limo": ["iris", "limo", "iris-limo"],
-  "GPULaw": ["gpulaw"],
-  "MedTravel": ["medtravel"],
-  "MedChat": ["medchat"],
-  "Sienovo": ["sienovo"],
+  GPULaw: ["gpulaw"],
+  MedTravel: ["medtravel"],
+  MedChat: ["medchat"],
+  Sienovo: ["sienovo"],
 };
 
-function matchesUserProject(cronProject: string, userProjectNames: string[]): boolean {
+function matchesUserProject(
+  cronProject: string,
+  userProjectNames: string[],
+): boolean {
   if (userProjectNames.includes(cronProject)) return true;
   for (const userProject of userProjectNames) {
     const aliases = PROJECT_ALIASES[userProject];
-    if (aliases && aliases.some((a) => cronProject.toLowerCase().includes(a))) return true;
-    if (cronProject.toLowerCase().includes(userProject.toLowerCase())) return true;
-    if (userProject.toLowerCase().includes(cronProject.toLowerCase())) return true;
+    if (aliases && aliases.some((a) => cronProject.toLowerCase().includes(a)))
+      return true;
+    if (cronProject.toLowerCase().includes(userProject.toLowerCase()))
+      return true;
+    if (userProject.toLowerCase().includes(cronProject.toLowerCase()))
+      return true;
   }
   return false;
 }
@@ -167,22 +248,40 @@ interface BrevoCampaign {
 }
 
 interface BrevoResult {
-  brevoStats: { emailsSent: number; delivered: number; opened: number; clicked: number };
+  brevoStats: {
+    emailsSent: number;
+    delivered: number;
+    opened: number;
+    clicked: number;
+  };
   brevoCampaigns: BrevoCampaign[];
-  brevoLists: { name: string; totalSubscribers: number; uniqueSubscribers: number }[];
+  brevoLists: {
+    name: string;
+    totalSubscribers: number;
+    uniqueSubscribers: number;
+  }[];
 }
 
 async function fetchBrevoData(): Promise<BrevoResult> {
   const apiKey = process.env.BREVO_API_KEY;
-  if (!apiKey) return { brevoStats: { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 }, brevoCampaigns: [], brevoLists: [] };
+  if (!apiKey)
+    return {
+      brevoStats: { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 },
+      brevoCampaigns: [],
+      brevoLists: [],
+    };
 
   const headers = { "api-key": apiKey, accept: "application/json" };
 
   try {
     // Run all 3 Brevo API calls concurrently
     const [aggRes, campRes, listsRes] = await Promise.all([
-      fetch("https://api.brevo.com/v3/smtp/statistics/aggregatedReport", { headers }),
-      fetch("https://api.brevo.com/v3/emailCampaigns?limit=50&sort=desc", { headers }),
+      fetch("https://api.brevo.com/v3/smtp/statistics/aggregatedReport", {
+        headers,
+      }),
+      fetch("https://api.brevo.com/v3/emailCampaigns?limit=50&sort=desc", {
+        headers,
+      }),
       fetch("https://api.brevo.com/v3/contacts/lists?limit=50", { headers }),
     ]);
 
@@ -200,39 +299,50 @@ async function fetchBrevoData(): Promise<BrevoResult> {
     let brevoCampaigns: BrevoCampaign[] = [];
     if (campRes.ok) {
       const campData = await campRes.json();
-      brevoCampaigns = (campData.campaigns || []).map((c: Record<string, unknown>) => {
-        const statsObj = c.statistics as Record<string, unknown> | undefined;
-        const globalStats = (statsObj?.globalStats as Record<string, number>) || {};
-        const campStats = (statsObj?.campaignStats as Record<string, number>[]) || [];
-        const aggregated = campStats.reduce(
-          (acc, cs) => ({
-            sent: acc.sent + (cs.sent || 0),
-            delivered: acc.delivered + (cs.delivered || 0),
-            uniqueViews: acc.uniqueViews + (cs.uniqueViews || 0),
-            uniqueClicks: acc.uniqueClicks + (cs.uniqueClicks || 0),
-          }),
-          { sent: 0, delivered: 0, uniqueViews: 0, uniqueClicks: 0 }
-        );
-        const sent = globalStats.sent || aggregated.sent;
-        const delivered = globalStats.delivered || aggregated.delivered;
-        const opened = globalStats.uniqueOpens || globalStats.uniqueViews || aggregated.uniqueViews;
-        const clicked = globalStats.uniqueClicks || aggregated.uniqueClicks;
-        const campName = (c.name as string) || (c.subject as string) || "";
-        return {
-          id: c.id as number,
-          name: campName,
-          status: (c.status as string) || "unknown",
-          sent,
-          delivered,
-          opened,
-          clicked,
-          project: detectProject(campName.toLowerCase().replace(/\s+/g, "-")),
-          sentDate: (c.sentDate as string) || (c.scheduledAt as string) || "",
-        };
-      });
+      brevoCampaigns = (campData.campaigns || []).map(
+        (c: Record<string, unknown>) => {
+          const statsObj = c.statistics as Record<string, unknown> | undefined;
+          const globalStats =
+            (statsObj?.globalStats as Record<string, number>) || {};
+          const campStats =
+            (statsObj?.campaignStats as Record<string, number>[]) || [];
+          const aggregated = campStats.reduce(
+            (acc, cs) => ({
+              sent: acc.sent + (cs.sent || 0),
+              delivered: acc.delivered + (cs.delivered || 0),
+              uniqueViews: acc.uniqueViews + (cs.uniqueViews || 0),
+              uniqueClicks: acc.uniqueClicks + (cs.uniqueClicks || 0),
+            }),
+            { sent: 0, delivered: 0, uniqueViews: 0, uniqueClicks: 0 },
+          );
+          const sent = globalStats.sent || aggregated.sent;
+          const delivered = globalStats.delivered || aggregated.delivered;
+          const opened =
+            globalStats.uniqueOpens ||
+            globalStats.uniqueViews ||
+            aggregated.uniqueViews;
+          const clicked = globalStats.uniqueClicks || aggregated.uniqueClicks;
+          const campName = (c.name as string) || (c.subject as string) || "";
+          return {
+            id: c.id as number,
+            name: campName,
+            status: (c.status as string) || "unknown",
+            sent,
+            delivered,
+            opened,
+            clicked,
+            project: detectProject(campName.toLowerCase().replace(/\s+/g, "-")),
+            sentDate: (c.sentDate as string) || (c.scheduledAt as string) || "",
+          };
+        },
+      );
     }
 
-    let brevoLists: { name: string; totalSubscribers: number; uniqueSubscribers: number }[] = [];
+    let brevoLists: {
+      name: string;
+      totalSubscribers: number;
+      uniqueSubscribers: number;
+    }[] = [];
     if (listsRes.ok) {
       const listsData = await listsRes.json();
       brevoLists = listsData.lists || [];
@@ -240,7 +350,11 @@ async function fetchBrevoData(): Promise<BrevoResult> {
 
     return { brevoStats, brevoCampaigns, brevoLists };
   } catch {
-    return { brevoStats: { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 }, brevoCampaigns: [], brevoLists: [] };
+    return {
+      brevoStats: { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 },
+      brevoCampaigns: [],
+      brevoLists: [],
+    };
   }
 }
 
@@ -248,13 +362,28 @@ async function fetchBrevoData(): Promise<BrevoResult> {
 
 interface GaResult {
   gaStats: { totalUsers: number; sessions: number; pageViews: number };
-  gaProjects: { project: string; status: "ok" | "no_data" | "error"; error?: string; data: { date: string; users: number; sessions: number; pageViews: number }[] }[];
+  gaProjects: {
+    project: string;
+    status: "ok" | "no_data" | "error";
+    error?: string;
+    data: {
+      date: string;
+      users: number;
+      sessions: number;
+      pageViews: number;
+    }[];
+  }[];
 }
 
-async function fetchGaData(propertyProjectMap: Record<string, string>): Promise<GaResult> {
+async function fetchGaData(
+  propertyProjectMap: Record<string, string>,
+): Promise<GaResult> {
   const gaPropertyIds = Object.keys(propertyProjectMap);
   if (!process.env.GA_SERVICE_ACCOUNT_KEY || gaPropertyIds.length === 0) {
-    return { gaStats: { totalUsers: 0, sessions: 0, pageViews: 0 }, gaProjects: [] };
+    return {
+      gaStats: { totalUsers: 0, sessions: 0, pageViews: 0 },
+      gaProjects: [],
+    };
   }
 
   try {
@@ -285,12 +414,21 @@ async function fetchGaData(propertyProjectMap: Record<string, string>): Promise<
                 { name: "sessions" },
                 { name: "screenPageViews" },
               ],
-              orderBys: [{ dimension: { dimensionName: "date", orderType: "ALPHANUMERIC" } }],
+              orderBys: [
+                {
+                  dimension: {
+                    dimensionName: "date",
+                    orderType: "ALPHANUMERIC",
+                  },
+                },
+              ],
             }),
           ]);
 
           const [response] = totalsResponse;
-          let totalUsers = 0, sessions = 0, pageViews = 0;
+          let totalUsers = 0,
+            sessions = 0,
+            pageViews = 0;
           if (response.rows?.[0]?.metricValues) {
             const vals = response.rows[0].metricValues;
             totalUsers = Number(vals[0]?.value || 0);
@@ -299,12 +437,18 @@ async function fetchGaData(propertyProjectMap: Record<string, string>): Promise<
           }
 
           const [dailyRes] = dailyResponse;
-          const dailyData: { date: string; users: number; sessions: number; pageViews: number }[] = [];
+          const dailyData: {
+            date: string;
+            users: number;
+            sessions: number;
+            pageViews: number;
+          }[] = [];
           for (const row of dailyRes.rows || []) {
             const dateStr = row.dimensionValues?.[0]?.value || "";
-            const formatted = dateStr.length === 8
-              ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
-              : dateStr;
+            const formatted =
+              dateStr.length === 8
+                ? `${dateStr.slice(0, 4)}-${dateStr.slice(4, 6)}-${dateStr.slice(6, 8)}`
+                : dateStr;
             dailyData.push({
               date: formatted,
               users: Number(row.metricValues?.[0]?.value || 0),
@@ -313,14 +457,36 @@ async function fetchGaData(propertyProjectMap: Record<string, string>): Promise<
             });
           }
 
-          const hasData = dailyData.length > 0 || totalUsers > 0 || sessions > 0 || pageViews > 0;
-          return { projectName, totalUsers, sessions, pageViews, dailyData, status: hasData ? "ok" as const : "no_data" as const };
+          const hasData =
+            dailyData.length > 0 ||
+            totalUsers > 0 ||
+            sessions > 0 ||
+            pageViews > 0;
+          return {
+            projectName,
+            totalUsers,
+            sessions,
+            pageViews,
+            dailyData,
+            status: hasData ? ("ok" as const) : ("no_data" as const),
+          };
         } catch (err) {
-          console.error(`GA4 error for property ${propertyId} (${projectName}):`, err);
+          console.error(
+            `GA4 error for property ${propertyId} (${projectName}):`,
+            err,
+          );
           const errMsg = err instanceof Error ? err.message : "Unknown error";
-          return { projectName, totalUsers: 0, sessions: 0, pageViews: 0, dailyData: [], status: "error" as const, error: errMsg };
+          return {
+            projectName,
+            totalUsers: 0,
+            sessions: 0,
+            pageViews: 0,
+            dailyData: [],
+            status: "error" as const,
+            error: errMsg,
+          };
         }
-      })
+      }),
     );
 
     const gaStats = { totalUsers: 0, sessions: 0, pageViews: 0 };
@@ -329,20 +495,261 @@ async function fetchGaData(propertyProjectMap: Record<string, string>): Promise<
       gaStats.totalUsers += r.totalUsers;
       gaStats.sessions += r.sessions;
       gaStats.pageViews += r.pageViews;
-      gaProjects.push({ project: r.projectName, status: r.status, error: r.error, data: r.dailyData });
+      gaProjects.push({
+        project: r.projectName,
+        status: r.status,
+        error: r.error,
+        data: r.dailyData,
+      });
     }
 
     return { gaStats, gaProjects };
   } catch {
-    return { gaStats: { totalUsers: 0, sessions: 0, pageViews: 0 }, gaProjects: [] };
+    return {
+      gaStats: { totalUsers: 0, sessions: 0, pageViews: 0 },
+      gaProjects: [],
+    };
   }
 }
 
 // ── Token usage fetching ──
 
 interface TokenResult {
-  tokenUsage: { date: string; project: string; prompt_tokens: number; completion_tokens: number; total_tokens: number }[];
-  tokenSummary: { totalTokens: number; promptTokens: number; completionTokens: number };
+  tokenUsage: {
+    date: string;
+    project: string;
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  }[];
+  tokenSummary: {
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+  };
+}
+
+interface TaskStatusCounts {
+  pending: number;
+  processing: number;
+  completed: number;
+  total: number;
+}
+
+interface TaskStatusByProject extends TaskStatusCounts {
+  project: string;
+}
+
+interface KpisByProject {
+  project: string;
+  leadsGenerated: number;
+  contentPublished: number;
+}
+
+interface BrevoContactsByProject {
+  project: string;
+  contacts: number;
+}
+
+async function fetchTaskStatusCounts(
+  sql: ReturnType<typeof getDb>,
+  projectIds: number[],
+  isAdmin: boolean,
+): Promise<TaskStatusCounts> {
+  try {
+    if (!isAdmin && projectIds.length === 0) {
+      return { pending: 0, processing: 0, completed: 0, total: 0 };
+    }
+    const rows = isAdmin
+      ? await sql`
+          SELECT
+            COUNT(*) FILTER (WHERE task_status = 'pending')::int AS pending,
+            COUNT(*) FILTER (WHERE task_status IN ('processing', 'in_progress'))::int AS processing,
+            COUNT(*) FILTER (WHERE task_status = 'completed')::int AS completed
+          FROM (
+            SELECT LOWER(COALESCE(task->>'status', '')) AS task_status
+            FROM agent_assignments aa
+            CROSS JOIN LATERAL jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(aa.config->'tasks') = 'array' THEN aa.config->'tasks'
+                ELSE '[]'::jsonb
+              END
+            ) AS task
+            WHERE aa.status = 'active'
+          ) task_rows`
+      : await sql`
+          SELECT
+            COUNT(*) FILTER (WHERE task_status = 'pending')::int AS pending,
+            COUNT(*) FILTER (WHERE task_status IN ('processing', 'in_progress'))::int AS processing,
+            COUNT(*) FILTER (WHERE task_status = 'completed')::int AS completed
+          FROM (
+            SELECT LOWER(COALESCE(task->>'status', '')) AS task_status
+            FROM agent_assignments aa
+            CROSS JOIN LATERAL jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(aa.config->'tasks') = 'array' THEN aa.config->'tasks'
+                ELSE '[]'::jsonb
+              END
+            ) AS task
+            WHERE aa.status = 'active'
+              AND aa.project_id = ANY(${projectIds})
+          ) task_rows`;
+    const pending = (rows[0]?.pending as number) || 0;
+    const processing = (rows[0]?.processing as number) || 0;
+    const completed = (rows[0]?.completed as number) || 0;
+    return {
+      pending,
+      processing,
+      completed,
+      total: pending + processing + completed,
+    };
+  } catch {
+    return { pending: 0, processing: 0, completed: 0, total: 0 };
+  }
+}
+
+async function fetchTaskStatusByProject(
+  sql: ReturnType<typeof getDb>,
+  projectIds: number[],
+  isAdmin: boolean,
+): Promise<TaskStatusByProject[]> {
+  try {
+    if (!isAdmin && projectIds.length === 0) return [];
+    const rows = isAdmin
+      ? await sql`
+          SELECT
+            p.name AS project,
+            COUNT(*) FILTER (WHERE task_status = 'pending')::int AS pending,
+            COUNT(*) FILTER (WHERE task_status IN ('processing', 'in_progress'))::int AS processing,
+            COUNT(*) FILTER (WHERE task_status = 'completed')::int AS completed
+          FROM (
+            SELECT aa.project_id, LOWER(COALESCE(task->>'status', '')) AS task_status
+            FROM agent_assignments aa
+            CROSS JOIN LATERAL jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(aa.config->'tasks') = 'array' THEN aa.config->'tasks'
+                ELSE '[]'::jsonb
+              END
+            ) AS task
+            WHERE aa.status = 'active'
+          ) task_rows
+          JOIN projects p ON p.id = task_rows.project_id
+          GROUP BY p.name
+          ORDER BY p.name`
+      : await sql`
+          SELECT
+            p.name AS project,
+            COUNT(*) FILTER (WHERE task_status = 'pending')::int AS pending,
+            COUNT(*) FILTER (WHERE task_status IN ('processing', 'in_progress'))::int AS processing,
+            COUNT(*) FILTER (WHERE task_status = 'completed')::int AS completed
+          FROM (
+            SELECT aa.project_id, LOWER(COALESCE(task->>'status', '')) AS task_status
+            FROM agent_assignments aa
+            CROSS JOIN LATERAL jsonb_array_elements(
+              CASE
+                WHEN jsonb_typeof(aa.config->'tasks') = 'array' THEN aa.config->'tasks'
+                ELSE '[]'::jsonb
+              END
+            ) AS task
+            WHERE aa.status = 'active'
+              AND aa.project_id = ANY(${projectIds})
+          ) task_rows
+          JOIN projects p ON p.id = task_rows.project_id
+          GROUP BY p.name
+          ORDER BY p.name`;
+    return rows.map((r) => {
+      const pending = (r.pending as number) || 0;
+      const processing = (r.processing as number) || 0;
+      const completed = (r.completed as number) || 0;
+      return {
+        project: (r.project as string) || "General",
+        pending,
+        processing,
+        completed,
+        total: pending + processing + completed,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function fetchDbKpisByProject(
+  sql: ReturnType<typeof getDb>,
+  projectIds: number[],
+  isAdmin: boolean,
+): Promise<KpisByProject[]> {
+  try {
+    if (!isAdmin && projectIds.length === 0) return [];
+    const leadRows = isAdmin
+      ? await sql`
+          SELECT
+            p.name AS project,
+            COUNT(*)::int AS leads_generated
+          FROM leads l
+          JOIN projects p ON p.id = l.project_id
+          WHERE l.created_at >= NOW() - INTERVAL '30 days'
+          GROUP BY p.name
+          ORDER BY p.name`
+      : await sql`
+          SELECT
+            p.name AS project,
+            COUNT(*)::int AS leads_generated
+          FROM leads l
+          JOIN projects p ON p.id = l.project_id
+          WHERE l.created_at >= NOW() - INTERVAL '30 days'
+            AND l.project_id = ANY(${projectIds})
+          GROUP BY p.name
+          ORDER BY p.name`;
+
+    const contentRows = isAdmin
+      ? await sql`
+          SELECT
+            p.name AS project,
+            SUM(
+              CASE WHEN COALESCE(ar.metrics->>'articles', '') ~ '^-?\d+(\.\d+)?$' THEN (ar.metrics->>'articles')::numeric ELSE 0 END +
+              CASE WHEN COALESCE(ar.metrics->>'posts_published', '') ~ '^-?\d+(\.\d+)?$' THEN (ar.metrics->>'posts_published')::numeric ELSE 0 END +
+              CASE WHEN COALESCE(ar.metrics->>'content', '') ~ '^-?\d+(\.\d+)?$' THEN (ar.metrics->>'content')::numeric ELSE 0 END +
+              CASE WHEN COALESCE(ar.metrics->>'prs_created', '') ~ '^-?\d+(\.\d+)?$' THEN (ar.metrics->>'prs_created')::numeric ELSE 0 END +
+              CASE WHEN LOWER(COALESCE(ar.task_name, '')) LIKE '%blog%' OR LOWER(COALESCE(ar.task_name, '')) LIKE '%content%' OR COALESCE(ar.task_name, '') LIKE '%博客%' OR COALESCE(ar.task_name, '') LIKE '%内容%' THEN 1 ELSE 0 END
+            )::int AS content_published
+          FROM agent_reports ar
+          JOIN projects p ON p.id = ar.project_id
+          WHERE ar.created_at >= NOW() - INTERVAL '30 days'
+          GROUP BY p.name
+          ORDER BY p.name`
+      : await sql`
+          SELECT
+            p.name AS project,
+            SUM(
+              CASE WHEN COALESCE(ar.metrics->>'articles', '') ~ '^-?\d+(\.\d+)?$' THEN (ar.metrics->>'articles')::numeric ELSE 0 END +
+              CASE WHEN COALESCE(ar.metrics->>'posts_published', '') ~ '^-?\d+(\.\d+)?$' THEN (ar.metrics->>'posts_published')::numeric ELSE 0 END +
+              CASE WHEN COALESCE(ar.metrics->>'content', '') ~ '^-?\d+(\.\d+)?$' THEN (ar.metrics->>'content')::numeric ELSE 0 END +
+              CASE WHEN COALESCE(ar.metrics->>'prs_created', '') ~ '^-?\d+(\.\d+)?$' THEN (ar.metrics->>'prs_created')::numeric ELSE 0 END +
+              CASE WHEN LOWER(COALESCE(ar.task_name, '')) LIKE '%blog%' OR LOWER(COALESCE(ar.task_name, '')) LIKE '%content%' OR COALESCE(ar.task_name, '') LIKE '%博客%' OR COALESCE(ar.task_name, '') LIKE '%内容%' THEN 1 ELSE 0 END
+            )::int AS content_published
+          FROM agent_reports ar
+          JOIN projects p ON p.id = ar.project_id
+          WHERE ar.created_at >= NOW() - INTERVAL '30 days'
+            AND ar.project_id = ANY(${projectIds})
+          GROUP BY p.name
+          ORDER BY p.name`;
+
+    const map: Record<string, KpisByProject> = {};
+    for (const r of leadRows) {
+      const project = (r.project as string) || "General";
+      if (!map[project]) map[project] = { project, leadsGenerated: 0, contentPublished: 0 };
+      map[project].leadsGenerated += (r.leads_generated as number) || 0;
+    }
+    for (const r of contentRows) {
+      const project = (r.project as string) || "General";
+      if (!map[project]) map[project] = { project, leadsGenerated: 0, contentPublished: 0 };
+      map[project].contentPublished += (r.content_published as number) || 0;
+    }
+    return Object.values(map).sort((a, b) => a.project.localeCompare(b.project));
+  } catch {
+    return [];
+  }
 }
 
 async function fetchTokenUsage(
@@ -350,15 +757,19 @@ async function fetchTokenUsage(
   userId: number,
   projectIds: number[],
   isAdmin: boolean,
-  isEnterprise: boolean
+  isEnterprise: boolean,
 ): Promise<TokenResult> {
   try {
     if (projectIds.length === 0 && !isAdmin && !isEnterprise) {
-      return { tokenUsage: [], tokenSummary: { totalTokens: 0, promptTokens: 0, completionTokens: 0 } };
+      return {
+        tokenUsage: [],
+        tokenSummary: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
+      };
     }
 
-    const rows = (isAdmin || isEnterprise)
-      ? await sql`
+    const rows =
+      isAdmin || isEnterprise
+        ? await sql`
           SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
             SUM(tu.prompt_tokens)::int as prompt_tokens,
             SUM(tu.completion_tokens)::int as completion_tokens,
@@ -368,7 +779,7 @@ async function fetchTokenUsage(
           WHERE tu.created_at >= NOW() - INTERVAL '30 days'
           GROUP BY DATE(tu.created_at), COALESCE(p.name, 'General')
           ORDER BY date`
-      : await sql`
+        : await sql`
           SELECT DATE(tu.created_at) as date, COALESCE(p.name, 'General') as project,
             SUM(tu.prompt_tokens)::int as prompt_tokens,
             SUM(tu.completion_tokens)::int as completion_tokens,
@@ -388,7 +799,11 @@ async function fetchTokenUsage(
       total_tokens: r.total_tokens as number,
     }));
 
-    const tokenSummary = { totalTokens: 0, promptTokens: 0, completionTokens: 0 };
+    const tokenSummary = {
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+    };
     for (const r of rows) {
       tokenSummary.totalTokens += r.total_tokens as number;
       tokenSummary.promptTokens += r.prompt_tokens as number;
@@ -397,13 +812,23 @@ async function fetchTokenUsage(
 
     return { tokenUsage, tokenSummary };
   } catch {
-    return { tokenUsage: [], tokenSummary: { totalTokens: 0, promptTokens: 0, completionTokens: 0 } };
+    return {
+      tokenUsage: [],
+      tokenSummary: { totalTokens: 0, promptTokens: 0, completionTokens: 0 },
+    };
   }
 }
 
 // ── DB agent reports fetching ──
 
-async function fetchDbAgentReports(sql: ReturnType<typeof getDb>): Promise<Record<string, { summary: string; metrics: Record<string, unknown>; project: string }>> {
+async function fetchDbAgentReports(
+  sql: ReturnType<typeof getDb>,
+): Promise<
+  Record<
+    string,
+    { summary: string; metrics: Record<string, unknown>; project: string }
+  >
+> {
   try {
     const dbReports = await sql`
       SELECT ar.task_name, ar.summary, ar.metrics, p.name as project_name
@@ -411,7 +836,10 @@ async function fetchDbAgentReports(sql: ReturnType<typeof getDb>): Promise<Recor
       JOIN projects p ON ar.project_id = p.id
       ORDER BY ar.created_at DESC
     `;
-    const reportByTask: Record<string, { summary: string; metrics: Record<string, unknown>; project: string }> = {};
+    const reportByTask: Record<
+      string,
+      { summary: string; metrics: Record<string, unknown>; project: string }
+    > = {};
     for (const r of dbReports) {
       const taskName = r.task_name as string;
       if (!reportByTask[taskName]) {
@@ -441,13 +869,20 @@ export async function GET(request: Request) {
   const email = session.user.email as string;
 
   const sql = getDb();
-  let users = await sql`SELECT id, role, plan FROM users WHERE email = ${email}`;
+  let users =
+    await sql`SELECT id, role, plan FROM users WHERE email = ${email}`;
   if (users.length === 0) {
-    users = await sql`INSERT INTO users (email, name, auth0_id) VALUES (${email}, ${(session.user.name as string) || ""}, ${session.user.sub as string}) RETURNING id, role, plan`;
+    users =
+      await sql`INSERT INTO users (email, name, auth0_id) VALUES (${email}, ${(session.user.name as string) || ""}, ${session.user.sub as string}) RETURNING id, role, plan`;
   }
   const userId = users[0].id;
   const isAdmin = users[0].role === "admin";
-  const userPlan = await resolveUserPlan(sql, userId, (users[0].plan as string) || "starter", email);
+  const userPlan = await resolveUserPlan(
+    sql,
+    userId,
+    (users[0].plan as string) || "starter",
+    email,
+  );
   const isEnterprise = userPlan === "enterprise";
 
   const emailDomain = email.split("@")[1] || "";
@@ -467,12 +902,24 @@ export async function GET(request: Request) {
   }
 
   // ── Run ALL data sources concurrently ──
-  const [openClawData, brevoData, gaData, tokenData, dbReportsByTask] = await Promise.all([
+  const [
+    openClawData,
+    brevoData,
+    gaData,
+    tokenData,
+    dbReportsByTask,
+    taskStatusCounts,
+    taskStatusByProject,
+    dbKpisByProject,
+  ] = await Promise.all([
     readOpenClawData(),
     fetchBrevoData(),
     fetchGaData(propertyProjectMap),
     fetchTokenUsage(sql, userId as number, projectIds, isAdmin, isEnterprise),
     fetchDbAgentReports(sql),
+    fetchTaskStatusCounts(sql, projectIds, isAdmin),
+    fetchTaskStatusByProject(sql, projectIds, isAdmin),
+    fetchDbKpisByProject(sql, projectIds, isAdmin),
   ]);
 
   const { jobs, summaries } = openClawData;
@@ -499,17 +946,50 @@ export async function GET(request: Request) {
         metrics: {
           ...metrics,
           duration_sec: durationSec,
-          ...(job.state.consecutiveErrors ? { errors: job.state.consecutiveErrors } : {}),
+          ...(job.state.consecutiveErrors
+            ? { errors: job.state.consecutiveErrors }
+            : {}),
         },
-        status: job.state.lastStatus === "ok" ? "active" : job.state.lastStatus === "error" ? "paused" : "completed",
+        status:
+          job.state.lastStatus === "ok"
+            ? "active"
+            : job.state.lastStatus === "error"
+              ? "paused"
+              : "completed",
         project,
-        last_run: job.state.lastRunAtMs ? new Date(job.state.lastRunAtMs).toISOString() : "",
+        last_run: job.state.lastRunAtMs
+          ? new Date(job.state.lastRunAtMs).toISOString()
+          : "",
       };
     });
 
   const reports = isAdmin
     ? allReports
-    : allReports.filter((r) => r.project !== "General" && matchesUserProject(r.project, userProjectNames));
+    : allReports.filter(
+        (r) =>
+          r.project !== "General" &&
+          matchesUserProject(r.project, userProjectNames),
+      );
+
+  const brevoContactsByProjectMap: Record<string, number> = {};
+  for (const list of brevoLists) {
+    const count = list.uniqueSubscribers || list.totalSubscribers || 0;
+    if (!count) continue;
+    const detectedProject = detectProject(
+      list.name.toLowerCase().replace(/\s+/g, "-"),
+    );
+    const project = detectedProject === "General" ? "Unknown" : detectedProject;
+    if (!isAdmin && (project === "Unknown" || !matchesUserProject(project, userProjectNames))) {
+      continue;
+    }
+    brevoContactsByProjectMap[project] =
+      (brevoContactsByProjectMap[project] || 0) + count;
+  }
+  const brevoContactsByProject: BrevoContactsByProject[] = Object.entries(
+    brevoContactsByProjectMap,
+  )
+    .map(([project, contacts]) => ({ project, contacts }))
+    .sort((a, b) => b.contacts - a.contacts);
 
   // Build server agents list from ALL configured jobs
   const allServerAgents = jobs
@@ -526,13 +1006,23 @@ export async function GET(request: Request) {
         agent: job.name,
         description: job.description || "",
         period: category,
-        summary: hasRun ? (summary || fallbackSummary(job, locale)) : "",
-        metrics: hasRun ? {
-          ...metrics,
-          duration_sec: durationSec,
-          ...(job.state.consecutiveErrors ? { errors: job.state.consecutiveErrors } : {}),
-        } : {},
-        status: !hasRun ? "pending" : job.state.lastStatus === "ok" ? "active" : job.state.lastStatus === "error" ? "paused" : "completed",
+        summary: hasRun ? summary || fallbackSummary(job, locale) : "",
+        metrics: hasRun
+          ? {
+              ...metrics,
+              duration_sec: durationSec,
+              ...(job.state.consecutiveErrors
+                ? { errors: job.state.consecutiveErrors }
+                : {}),
+            }
+          : {},
+        status: !hasRun
+          ? "pending"
+          : job.state.lastStatus === "ok"
+            ? "active"
+            : job.state.lastStatus === "error"
+              ? "paused"
+              : "completed",
         enabled: job.enabled !== false,
         project,
         last_run: hasRun ? new Date(job.state.lastRunAtMs!).toISOString() : "",
@@ -541,12 +1031,18 @@ export async function GET(request: Request) {
 
   const serverAgents = isAdmin
     ? allServerAgents
-    : allServerAgents.filter((a) => a.project !== "General" && matchesUserProject(a.project, userProjectNames));
+    : allServerAgents.filter(
+        (a) =>
+          a.project !== "General" &&
+          matchesUserProject(a.project, userProjectNames),
+      );
 
   // ── Filter Brevo campaigns by user projects ──
   if (!isAdmin) {
-    brevoCampaigns = brevoCampaigns.filter((c) =>
-      c.project !== "General" && matchesUserProject(c.project, userProjectNames)
+    brevoCampaigns = brevoCampaigns.filter(
+      (c) =>
+        c.project !== "General" &&
+        matchesUserProject(c.project, userProjectNames),
     );
     brevoStats = brevoCampaigns.reduce(
       (acc, c) => ({
@@ -555,24 +1051,40 @@ export async function GET(request: Request) {
         opened: acc.opened + c.opened,
         clicked: acc.clicked + c.clicked,
       }),
-      { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 }
+      { emailsSent: 0, delivered: 0, opened: 0, clicked: 0 },
     );
   }
 
   // ── Enrich server agents with Brevo campaign data ──
   if (brevoCampaigns.length > 0) {
-    const campaignsByProject: Record<string, { sent: number; delivered: number; opened: number; clicked: number; latestDate: string }> = {};
+    const campaignsByProject: Record<
+      string,
+      {
+        sent: number;
+        delivered: number;
+        opened: number;
+        clicked: number;
+        latestDate: string;
+      }
+    > = {};
     for (const c of brevoCampaigns) {
       if (c.status !== "sent") continue;
       if (!campaignsByProject[c.project]) {
-        campaignsByProject[c.project] = { sent: 0, delivered: 0, opened: 0, clicked: 0, latestDate: "" };
+        campaignsByProject[c.project] = {
+          sent: 0,
+          delivered: 0,
+          opened: 0,
+          clicked: 0,
+          latestDate: "",
+        };
       }
       const agg = campaignsByProject[c.project];
       agg.sent += c.sent;
       agg.delivered += c.delivered;
       agg.opened += c.opened;
       agg.clicked += c.clicked;
-      if (c.sentDate && c.sentDate > agg.latestDate) agg.latestDate = c.sentDate;
+      if (c.sentDate && c.sentDate > agg.latestDate)
+        agg.latestDate = c.sentDate;
     }
     for (const agent of serverAgents) {
       const projStats = campaignsByProject[agent.project];
@@ -585,11 +1097,18 @@ export async function GET(request: Request) {
           opened: projStats.opened,
           clicked: projStats.clicked,
         };
-        const openRate = projStats.delivered > 0 ? ((projStats.opened / projStats.delivered) * 100).toFixed(1) : "0";
-        const clickRate = projStats.delivered > 0 ? ((projStats.clicked / projStats.delivered) * 100).toFixed(1) : "0";
-        agent.summary = locale === "zh"
-          ? `已发送 ${projStats.sent} 封邮件，送达 ${projStats.delivered}，打开率 ${openRate}%，点击率 ${clickRate}%`
-          : `Sent ${projStats.sent} emails, ${projStats.delivered} delivered, ${openRate}% open rate, ${clickRate}% click rate`;
+        const openRate =
+          projStats.delivered > 0
+            ? ((projStats.opened / projStats.delivered) * 100).toFixed(1)
+            : "0";
+        const clickRate =
+          projStats.delivered > 0
+            ? ((projStats.clicked / projStats.delivered) * 100).toFixed(1)
+            : "0";
+        agent.summary =
+          locale === "zh"
+            ? `已发送 ${projStats.sent} 封邮件，送达 ${projStats.delivered}，打开率 ${openRate}%，点击率 ${clickRate}%`
+            : `Sent ${projStats.sent} emails, ${projStats.delivered} delivered, ${openRate}% open rate, ${clickRate}% click rate`;
         if (projStats.latestDate) agent.last_run = projStats.latestDate;
       }
     }
@@ -601,7 +1120,9 @@ export async function GET(request: Request) {
     for (const list of brevoLists) {
       const count = list.uniqueSubscribers || list.totalSubscribers;
       if (!count) continue;
-      const project = detectProject(list.name.toLowerCase().replace(/\s+/g, "-"));
+      const project = detectProject(
+        list.name.toLowerCase().replace(/\s+/g, "-"),
+      );
       leadsByProject[project] = (leadsByProject[project] || 0) + count;
     }
     for (const agent of serverAgents) {
@@ -610,9 +1131,10 @@ export async function GET(request: Request) {
       if (agent.period === "lead_generation" && agent.status === "pending") {
         agent.status = "active";
         agent.metrics = { contacts_found: leadCount };
-        agent.summary = locale === "zh"
-          ? `已找到 ${leadCount} 个潜在客户联系人`
-          : `Found ${leadCount} prospect contacts`;
+        agent.summary =
+          locale === "zh"
+            ? `已找到 ${leadCount} 个潜在客户联系人`
+            : `Found ${leadCount} prospect contacts`;
       }
     }
   }
@@ -621,7 +1143,11 @@ export async function GET(request: Request) {
   for (const agent of serverAgents) {
     const dbReport = dbReportsByTask[agent.agent];
     if (!dbReport) continue;
-    if (agent.status === "pending" && dbReport.summary && Object.keys(dbReport.metrics).length > 0) {
+    if (
+      agent.status === "pending" &&
+      dbReport.summary &&
+      Object.keys(dbReport.metrics).length > 0
+    ) {
       agent.status = "active";
       agent.summary = dbReport.summary;
       const numericMetrics: Record<string, number> = {};
@@ -634,5 +1160,21 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ plan: userPlan, reports, agents: [], serverAgents, brevoStats, brevoCampaigns, gaStats, gaProjects, tokenUsage, tokenSummary });
+  return NextResponse.json({
+    plan: userPlan,
+    reports,
+    agents: [],
+    serverAgents,
+    brevoStats,
+    brevoCampaigns,
+    gaStats,
+    gaProjects,
+    tokenUsage,
+    tokenSummary,
+    taskStatusCounts,
+    taskStatusByProject,
+    dbKpisByProject,
+    brevoContactsByProject,
+    tasksCompleted: taskStatusCounts.total,
+  });
 }

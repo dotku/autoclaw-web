@@ -1,6 +1,7 @@
 const HUNTER_API_KEY = process.env.HUNTER_API_KEY;
 const SNOV_API_ID = process.env.SNOV_API_ID;
 const SNOV_API_SECRET = process.env.SNOV_API_SECRET;
+const APOLLO_API_KEY = process.env.APOLLO_API_KEY;
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 
 const BREVO_LIST_ID = 8; // MedTravel Leads list
@@ -11,7 +12,7 @@ export interface Lead {
   lastName: string;
   company: string;
   position: string;
-  source: "hunter" | "snov";
+  source: "hunter" | "snov" | "apollo";
   confidence?: number;
   verified?: boolean;
 }
@@ -71,23 +72,45 @@ async function searchSnov(domain: string): Promise<Lead[]> {
   }));
 }
 
-function dedupeLeads(hunterLeads: Lead[], snovLeads: Lead[]): Lead[] {
+async function searchApollo(domain: string): Promise<Lead[]> {
+  if (!APOLLO_API_KEY) return [];
+  try {
+    const res = await fetch("https://api.apollo.io/v1/mixed_people/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Api-Key": APOLLO_API_KEY },
+      body: JSON.stringify({
+        q_organization_domains: domain,
+        per_page: 10,
+      }),
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    const people = data.people || [];
+    return people.map((p: Record<string, unknown>) => ({
+      email: (p.email as string) || "",
+      firstName: (p.first_name as string) || "",
+      lastName: (p.last_name as string) || "",
+      company: (p.organization_name as string) || domain,
+      position: (p.title as string) || "",
+      source: "apollo" as const,
+      verified: Boolean(p.email),
+    })).filter((l: Lead) => l.email);
+  } catch {
+    return [];
+  }
+}
+
+function dedupeLeads(...leadSources: Lead[][]): Lead[] {
   const seen = new Set<string>();
   const result: Lead[] = [];
-  // Hunter first (has names/positions)
-  for (const lead of hunterLeads) {
-    const key = lead.email.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(lead);
-    }
-  }
-  // Snov fills in extras
-  for (const lead of snovLeads) {
-    const key = lead.email.toLowerCase();
-    if (!seen.has(key)) {
-      seen.add(key);
-      result.push(lead);
+  // Sources are in priority order: Apollo (richest data), Hunter, Snov
+  for (const leads of leadSources) {
+    for (const lead of leads) {
+      const key = lead.email.toLowerCase();
+      if (!seen.has(key)) {
+        seen.add(key);
+        result.push(lead);
+      }
     }
   }
   return result;
@@ -132,16 +155,20 @@ export async function prospectDomain(domain: string): Promise<{
   imported: number;
   hunterCount: number;
   snovCount: number;
+  apolloCount: number;
 }> {
-  const [hunterLeads, snovLeads] = await Promise.all([
+  const [apolloLeads, hunterLeads, snovLeads] = await Promise.all([
+    searchApollo(domain),
     searchHunter(domain),
     searchSnov(domain),
   ]);
-  const leads = dedupeLeads(hunterLeads, snovLeads);
+  // Apollo first (richest data), then Hunter, then Snov as fallback
+  const leads = dedupeLeads(apolloLeads, hunterLeads, snovLeads);
   const imported = await importToBrevo(leads);
   return {
     leads,
     imported,
+    apolloCount: apolloLeads.length,
     hunterCount: hunterLeads.length,
     snovCount: snovLeads.length,
   };

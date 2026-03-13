@@ -46,7 +46,7 @@ const AGENT_PLANS: Record<string, { plan: string; tasks: { name: string; status:
     plan: "Define ideal customer profile, build lead database from multiple sources, score and qualify leads, deliver enriched lead lists.",
     tasks: [
       { name: "Define ICP and qualification criteria", status: "in_progress" },
-      { name: "Set up data sources (LinkedIn, Apollo, etc.)", status: "pending" },
+      { name: "Verify available data sources", status: "pending" },
       { name: "Build initial lead list (200+ leads)", status: "pending" },
       { name: "Enrich leads with company & contact data", status: "pending" },
       { name: "Score and prioritize leads", status: "pending" },
@@ -219,7 +219,7 @@ export async function POST(req: NextRequest) {
   // Fetch user BYOK AI keys
   const byokRows = await sql`
     SELECT service, api_key FROM user_api_keys
-    WHERE user_id = ${userId} AND service IN ('openai', 'anthropic', 'google')
+    WHERE user_id = ${userId} AND service IN ('openai', 'anthropic', 'google', 'alibaba')
   `;
   const byok: ByokKeys = {};
   for (const row of byokRows) {
@@ -228,6 +228,7 @@ export async function POST(req: NextRequest) {
       if (row.service === "openai") byok.openai = key;
       else if (row.service === "anthropic") byok.anthropic = key;
       else if (row.service === "google") byok.google = key;
+      else if (row.service === "alibaba") byok.alibaba = key;
     } catch {
       // Skip keys that fail to decrypt
     }
@@ -611,7 +612,7 @@ export async function POST(req: NextRequest) {
           // Save to paid user's project
           await saveLeadsToProject(result.leads, domains[0]);
 
-          reply = `**Lead search: ${domains[0]}**\n\nFound **${result.leads.length}** contacts (Hunter: ${result.hunterCount}, Snov: ${result.snovCount})\n\n| Email | Name | Position | Source |\n|-------|------|----------|--------|\n${leadTable}`;
+          reply = `**Lead search: ${domains[0]}**\n\nFound **${result.leads.length}** contacts (Apollo: ${result.apolloCount}, Hunter: ${result.hunterCount}, Snov: ${result.snovCount})\n\n| Email | Name | Position | Source |\n|-------|------|----------|--------|\n${leadTable}`;
           if (!isPaid && result.leads.length > 10) {
             reply += `\n\n_Showing 10 of ${result.leads.length} results. Upgrade to **Growth** or **Scale** to see all contacts and save to your database._`;
           }
@@ -659,6 +660,9 @@ export async function POST(req: NextRequest) {
       openai: "openai",
       anthropic: "anthropic",
       google: "google",
+      alibaba: "alibaba",
+      qwen: "alibaba",
+      dashscope: "alibaba",
       brevo: "brevo",
       apollo: "apollo",
       hunter: "hunter",
