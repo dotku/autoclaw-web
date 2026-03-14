@@ -425,18 +425,46 @@ export default function TikTokPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Voice</label>
-                        <select
-                          value={narrationVoice}
-                          onChange={(e) => setNarrationVoice(e.target.value)}
-                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
-                        >
-                          <option value="alloy">Alloy</option>
-                          <option value="echo">Echo</option>
-                          <option value="fable">Fable</option>
-                          <option value="onyx">Onyx</option>
-                          <option value="nova">Nova</option>
-                          <option value="shimmer">Shimmer</option>
-                        </select>
+                        <div className="flex gap-2">
+                          <select
+                            value={narrationVoice}
+                            onChange={(e) => setNarrationVoice(e.target.value)}
+                            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                          >
+                            <option value="alloy">Alloy</option>
+                            <option value="echo">Echo</option>
+                            <option value="fable">Fable</option>
+                            <option value="onyx">Onyx</option>
+                            <option value="nova">Nova</option>
+                            <option value="shimmer">Shimmer</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                const res = await fetch(`/api/tts-sample?voice=${narrationVoice}`);
+                                if (!res.ok) {
+                                  const data = await res.json();
+                                  setGenMessage(data.error || "Failed to play sample");
+                                  return;
+                                }
+                                const blob = await res.blob();
+                                const url = URL.createObjectURL(blob);
+                                const audio = new Audio(url);
+                                audio.play();
+                                audio.onended = () => URL.revokeObjectURL(url);
+                              } catch {
+                                setGenMessage("Failed to play voice sample");
+                              }
+                            }}
+                            className="px-3 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors"
+                            title="Preview voice"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Style</label>
