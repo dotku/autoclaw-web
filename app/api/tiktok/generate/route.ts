@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { prompt, duration = 5, model = "wavespeed-ai/wan-2.2/t2v-480p-ultra-fast" } = body;
+  const { prompt, duration = 5, model = "wavespeed-ai/wan-2.2/t2v-480p-ultra-fast", narration, background_music } = body;
 
   if (!prompt) {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
@@ -93,6 +93,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid model" }, { status: 400 });
   }
 
+  // Build request body
+  const generateBody: Record<string, unknown> = {
+    model,
+    prompt,
+    duration,
+    aspect_ratio: "9:16",
+  };
+
+  // Add narration if provided
+  if (narration?.text) {
+    generateBody.narration = {
+      text: narration.text,
+      voice: narration.voice || "nova",
+      style: narration.style || "professional",
+    };
+  }
+
+  // Add background music
+  if (background_music) {
+    generateBody.background_music = true;
+  }
+
   try {
     const res = await fetch("https://xpilot.jytech.us/api/v1/video/generate", {
       method: "POST",
@@ -100,12 +122,7 @@ export async function POST(req: NextRequest) {
         Authorization: `Bearer ${xpilotKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model,
-        prompt,
-        duration,
-        aspect_ratio: "9:16",
-      }),
+      body: JSON.stringify(generateBody),
     });
 
     const data = await res.json();

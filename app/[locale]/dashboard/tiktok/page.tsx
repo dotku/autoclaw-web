@@ -47,6 +47,11 @@ export default function TikTokPage() {
   const [genMessage, setGenMessage] = useState("");
   const [xpilotKey, setXpilotKey] = useState<string | null>(null);
   const [videoModels, setVideoModels] = useState<{ id: string; label: string; tier: string; durations?: number[] }[]>([]);
+  const [narrationEnabled, setNarrationEnabled] = useState(false);
+  const [narrationText, setNarrationText] = useState("");
+  const [narrationVoice, setNarrationVoice] = useState("nova");
+  const [narrationStyle, setNarrationStyle] = useState("professional");
+  const [bgMusicEnabled, setBgMusicEnabled] = useState(false);
 
   useEffect(() => {
     fetchStatus();
@@ -160,6 +165,10 @@ export default function TikTokPage() {
           prompt: genPrompt,
           duration: parseInt(genDuration),
           model: genModel,
+          ...(narrationEnabled && narrationText ? {
+            narration: { text: narrationText, voice: narrationVoice, style: narrationStyle },
+          } : {}),
+          ...(bgMusicEnabled ? { background_music: true } : {}),
         }),
       });
       const data = await res.json();
@@ -376,6 +385,76 @@ export default function TikTokPage() {
                   {generating ? t.genGenerating : t.genGenerate}
                 </button>
                 </div>
+              </div>
+
+              {/* Narration / Voice-over */}
+              <div className="border border-gray-200 rounded-lg p-4 space-y-3">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={narrationEnabled}
+                    onChange={(e) => setNarrationEnabled(e.target.checked)}
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Add Voice Narration</span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bgMusicEnabled}
+                    onChange={(e) => setBgMusicEnabled(e.target.checked)}
+                    className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Add Background Music</span>
+                  <span className="text-xs text-gray-400">(MMAudio V2)</span>
+                </label>
+
+                {narrationEnabled && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Narration Text</label>
+                      <textarea
+                        value={narrationText}
+                        onChange={(e) => setNarrationText(e.target.value)}
+                        placeholder="Text to be spoken over the video..."
+                        rows={2}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Voice</label>
+                        <select
+                          value={narrationVoice}
+                          onChange={(e) => setNarrationVoice(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        >
+                          <option value="alloy">Alloy</option>
+                          <option value="echo">Echo</option>
+                          <option value="fable">Fable</option>
+                          <option value="onyx">Onyx</option>
+                          <option value="nova">Nova</option>
+                          <option value="shimmer">Shimmer</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Style</label>
+                        <select
+                          value={narrationStyle}
+                          onChange={(e) => setNarrationStyle(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                        >
+                          <option value="professional">Professional</option>
+                          <option value="casual">Casual</option>
+                          <option value="dramatic">Dramatic</option>
+                          <option value="documentary">Documentary</option>
+                          <option value="enthusiastic">Enthusiastic</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
               {genMessage && (
                 <div className={`text-sm p-3 rounded-lg ${genMessage.includes(t.genFailed) ? "bg-red-50 text-red-600 border border-red-200" : "bg-purple-50 text-purple-700 border border-purple-200"}`}>
