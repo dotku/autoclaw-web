@@ -280,6 +280,12 @@ export default function TikTokPage() {
                   </span>
                 </div>
               </div>
+              <button
+                onClick={handleConnect}
+                className="mt-3 text-xs text-gray-500 hover:text-red-600 underline transition-colors"
+              >
+                Re-authorize
+              </button>
             </div>
           ) : (
             <div className="space-y-4">
