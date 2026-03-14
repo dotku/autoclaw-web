@@ -180,6 +180,8 @@ const zh: typeof en = {
     byokWorkerSecretHint: "用于验证对 Cloudflare Worker 请求的共享密钥。",
     byokXpilot: "xPilot",
     byokXpilotHint: "AI 社交媒体助手，用于内容创作和视频生成。在 xPilot → 设置 → API 密钥 中获取。",
+    byokBlobToken: "Vercel Blob",
+    byokBlobTokenHint: "Vercel Blob 存储令牌，用于保存生成的视频。在 Vercel 面板 → Storage → Blob → Tokens 中获取。",
     byokTiktokClientKey: "Client Key",
     byokTiktokClientSecret: "Client Secret",
     byokTiktok: "TikTok",

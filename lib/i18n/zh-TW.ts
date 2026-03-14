@@ -180,6 +180,8 @@ const zhTW: typeof en = {
     byokWorkerSecretHint: "用於驗證對 Cloudflare Worker 請求的共用金鑰。",
     byokXpilot: "xPilot",
     byokXpilotHint: "AI 社群媒體助手，用於內容創作和影片生成。在 xPilot → 設定 → API 金鑰 中取得。",
+    byokBlobToken: "Vercel Blob",
+    byokBlobTokenHint: "Vercel Blob 儲存令牌，用於儲存生成的影片。在 Vercel 面板 → Storage → Blob → Tokens 中取得。",
     byokTiktokClientKey: "Client Key",
     byokTiktokClientSecret: "Client Secret",
     byokTiktok: "TikTok",

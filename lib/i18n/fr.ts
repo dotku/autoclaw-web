@@ -180,6 +180,8 @@ const fr: typeof en = {
     byokWorkerSecretHint: "Secret partagé pour authentifier les requêtes vers votre Cloudflare Worker.",
     byokXpilot: "xPilot",
     byokXpilotHint: "Copilote IA pour les réseaux sociaux, création de contenu et génération vidéo. Trouvé dans xPilot → Paramètres → Clés API.",
+    byokBlobToken: "Vercel Blob",
+    byokBlobTokenHint: "Jeton de stockage Vercel Blob pour sauvegarder les vidéos générées. Trouvé dans Vercel Dashboard → Storage → Blob → Tokens.",
     byokTiktokClientKey: "Client Key",
     byokTiktokClientSecret: "Client Secret",
     byokTiktok: "TikTok",

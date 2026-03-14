@@ -753,6 +753,7 @@ export default function SettingsPage() {
               { service: "vercel", name: ts.byokVercel, hint: ts.byokVercelHint },
               { service: "clawhub", name: ts.byokClawhub, hint: ts.byokClawhubHint },
               { service: "xpilot", name: ts.byokXpilot, hint: ts.byokXpilotHint },
+              { service: "blob_token", name: ts.byokBlobToken, hint: ts.byokBlobTokenHint },
               { service: "brevo", name: ts.byokBravo, hint: ts.byokBrevoHint },
               { service: "sendgrid", name: ts.byokSendGrid, hint: ts.byokSendGridHint },
               ...(userPlan === "enterprise" || userPlan === "scale" ? [

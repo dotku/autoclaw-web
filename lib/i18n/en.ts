@@ -178,6 +178,8 @@ const en = {
     byokWorkerSecretHint: "Shared secret for authenticating requests to your Cloudflare Worker.",
     byokXpilot: "xPilot",
     byokXpilotHint: "AI social media copilot for content creation & video generation. Found in xPilot → Settings → API Keys.",
+    byokBlobToken: "Vercel Blob",
+    byokBlobTokenHint: "Vercel Blob storage token for saving generated videos. Found in Vercel Dashboard → Storage → Blob → Tokens.",
     byokTiktokClientKey: "Client Key",
     byokTiktokClientSecret: "Client Secret",
     byokTiktok: "TikTok",

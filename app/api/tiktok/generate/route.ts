@@ -11,10 +11,10 @@ function getIp(req: NextRequest): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
 
-async function getXpilotKey(userId: number): Promise<string | null> {
+async function getUserKey(userId: number, service: string): Promise<string | null> {
   const sql = getDb();
   const keys = await sql`
-    SELECT api_key FROM user_api_keys WHERE user_id = ${userId} AND service = 'xpilot' LIMIT 1
+    SELECT api_key FROM user_api_keys WHERE user_id = ${userId} AND service = ${service} LIMIT 1
   `;
   if (keys.length === 0) return null;
   return decrypt(keys[0].api_key);
@@ -49,7 +49,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const xpilotKey = await getXpilotKey(users[0].id);
+  const userId = users[0].id;
+  const xpilotKey = await getUserKey(userId, "xpilot");
   if (!xpilotKey) {
     return NextResponse.json(
       { error: "xPilot API key not configured. Add it in Settings > Market." },
@@ -130,7 +131,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
 
-  const xpilotKey = await getXpilotKey(users[0].id);
+  const userId = users[0].id;
+  const xpilotKey = await getUserKey(userId, "xpilot");
   if (!xpilotKey) {
     return NextResponse.json({ error: "xPilot API key not configured" }, { status: 400 });
   }
@@ -149,23 +151,27 @@ export async function GET(req: NextRequest) {
 
     // If completed and has video URL, save to Vercel Blob
     if (data.status === "completed" && videoUrl) {
-      try {
-        const videoRes = await fetch(videoUrl);
-        if (videoRes.ok) {
-          const videoBlob = await videoRes.blob();
-          const filename = `tiktok-videos/${taskId}.mp4`;
-          const blob = await put(filename, videoBlob, {
-            access: "public",
-            contentType: "video/mp4",
-          });
-          return NextResponse.json({
-            status: "completed",
-            videoUrl: blob.url,
-            originalUrl: videoUrl,
-          });
+      const blobToken = await getUserKey(userId, "blob_token");
+      if (blobToken) {
+        try {
+          const videoRes = await fetch(videoUrl);
+          if (videoRes.ok) {
+            const videoBlob = await videoRes.blob();
+            const filename = `tiktok-videos/${taskId}.mp4`;
+            const blob = await put(filename, videoBlob, {
+              access: "public",
+              contentType: "video/mp4",
+              token: blobToken,
+            });
+            return NextResponse.json({
+              status: "completed",
+              videoUrl: blob.url,
+              originalUrl: videoUrl,
+            });
+          }
+        } catch (blobErr) {
+          console.warn("Failed to save to Vercel Blob, using original URL:", blobErr);
         }
-      } catch (blobErr) {
-        console.warn("Failed to save to Vercel Blob, using original URL:", blobErr);
       }
       return NextResponse.json({ status: "completed", videoUrl });
     }
