@@ -4,7 +4,7 @@ import { Auth0Provider } from "@auth0/nextjs-auth0";
 import { Analytics } from "@vercel/analytics/next";
 import Script from "next/script";
 import { notFound } from "next/navigation";
-import { isValidLocale, type Locale } from "@/lib/i18n";
+import { isValidLocale } from "@/lib/i18n";
 import WeChatGuard from "@/components/WeChatGuard";
 import "../globals.css";
 

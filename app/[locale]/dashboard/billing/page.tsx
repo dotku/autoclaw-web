@@ -102,7 +102,12 @@ function formatCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
-function statusBadge(status: string | null) {
+const BILLING_STATUS_LABELS: Record<string, Record<string, string>> = {
+  en: { paid: "Paid", open: "Open", active: "Active", draft: "Draft", void: "Void", uncollectible: "Uncollectible", past_due: "Past Due", canceled: "Canceled", trialing: "Trial", paused: "Paused", unknown: "Unknown" },
+  zh: { paid: "已支付", open: "待支付", active: "生效中", draft: "草稿", void: "已作废", uncollectible: "无法收回", past_due: "逾期", canceled: "已取消", trialing: "试用中", paused: "已暂停", unknown: "未知" },
+};
+
+function statusBadge(status: string | null, locale = "en") {
   const colors: Record<string, string> = {
     paid: "bg-green-100 text-green-700",
     open: "bg-yellow-100 text-yellow-700",
@@ -116,9 +121,10 @@ function statusBadge(status: string | null) {
     paused: "bg-yellow-100 text-yellow-700",
   };
   const s = status || "unknown";
+  const label = BILLING_STATUS_LABELS[locale]?.[s] || BILLING_STATUS_LABELS.en[s] || s;
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[s] || "bg-gray-100 text-gray-600"}`}>
-      {s}
+      {label}
     </span>
   );
 }
@@ -371,6 +377,7 @@ export default function BillingPage() {
                     { service: "openai", name: "OpenAI" },
                     { service: "anthropic", name: "Anthropic" },
                     { service: "google", name: "Google Gemini" },
+                    { service: "alibaba", name: "Alibaba Qwen" },
                     { service: "vercel", name: "Vercel AI Gateway" },
                     { service: "clawhub", name: "ClawHub" },
                     { service: "twitter", name: "X (Twitter)", multi: ["twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret"] },
@@ -716,7 +723,7 @@ export default function BillingPage() {
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
                           <h3 className="font-semibold">{sub.amount ? `${formatCurrency(sub.amount, "usd")}/${sub.interval}` : td.customPlan}</h3>
-                          {statusBadge(sub.status)}
+                          {statusBadge(sub.status, locale)}
                         </div>
                         {sub.cancel_at_period_end && <span className="text-xs text-red-500 font-medium">{td.cancelsAtEnd}</span>}
                       </div>
@@ -756,7 +763,7 @@ export default function BillingPage() {
                             </td>
                             <td className="px-4 py-3 text-gray-600">{formatDate(inv.created)}</td>
                             <td className="px-4 py-3 font-medium">{formatCurrency(inv.amount_due, inv.currency)}</td>
-                            <td className="px-4 py-3">{statusBadge(inv.status)}</td>
+                            <td className="px-4 py-3">{statusBadge(inv.status, locale)}</td>
                             <td className="px-4 py-3 text-right space-x-2">
                               {inv.hosted_invoice_url && <a href={inv.hosted_invoice_url} target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline">{td.view}</a>}
                               {inv.invoice_pdf && <a href={inv.invoice_pdf} target="_blank" rel="noopener noreferrer" className="text-red-600 hover:underline">{td.pdf}</a>}

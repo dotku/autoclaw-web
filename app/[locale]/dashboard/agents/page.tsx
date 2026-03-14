@@ -3,8 +3,16 @@
 import { useUser } from "@auth0/nextjs-auth0/client";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { getDictionary, type Locale } from "@/lib/i18n";
 import DashboardShell from "@/components/DashboardShell";
+
+interface AgentModelOption {
+  id: string;
+  name: string;
+  available: boolean;
+}
 
 interface AgentAssignment {
   id: number;
@@ -13,8 +21,9 @@ interface AgentAssignment {
   project_name: string;
   project_id?: number;
   config?: {
+    model?: string;
     plan?: string;
-    tasks?: { name: string; status: string; result?: string }[];
+    tasks?: { name: string; status: string; result?: string; model_used?: string; use_mode?: string }[];
     blockers?: string[];
   };
 }
@@ -40,7 +49,12 @@ interface ServerAgent {
   enabled?: boolean;
 }
 
-function statusBadge(status: string | null) {
+const AGENT_STATUS_LABELS: Record<string, Record<string, string>> = {
+  en: { active: "Active", pending: "Pending", paused: "Paused", completed: "Completed", unknown: "Unknown" },
+  zh: { active: "运行中", pending: "待运行", paused: "已暂停", completed: "已完成", unknown: "未知" },
+};
+
+function statusBadge(status: string | null, locale = "en") {
   const colors: Record<string, string> = {
     active: "bg-green-100 text-green-700",
     pending: "bg-blue-100 text-blue-700",
@@ -48,9 +62,12 @@ function statusBadge(status: string | null) {
     completed: "bg-red-100 text-red-700",
   };
   const s = status || "unknown";
+  const label = AGENT_STATUS_LABELS[locale]?.[s] || AGENT_STATUS_LABELS.en[s] || s;
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[s] || "bg-gray-100 text-gray-600"}`}>
-      {s}
+    <span
+      className={`px-2 py-0.5 rounded-full text-xs font-medium ${colors[s] || "bg-gray-100 text-gray-600"}`}
+    >
+      {label}
     </span>
   );
 }
@@ -58,10 +75,98 @@ function statusBadge(status: string | null) {
 function RunningTimer({ startedAt }: { startedAt: number }) {
   const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    const interval = setInterval(
+      () => setElapsed(Math.floor((Date.now() - startedAt) / 1000)),
+      1000,
+    );
     return () => clearInterval(interval);
   }, [startedAt]);
   return <span className="ml-1 text-yellow-600 font-normal">({elapsed}s)</span>;
+}
+
+function stringifyResult(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value == null) return "";
+  try {
+    return `\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\``;
+  } catch {
+    return String(value);
+  }
+}
+
+function formatExecutionData(data: unknown, labels?: { statusCompleted: string; statusFailed: string; executedTasks: string; executionCompleted: string }): string {
+  if (!data || typeof data !== "object") {
+    return stringifyResult(data);
+  }
+
+  const payload = data as {
+    message?: string;
+    error?: string;
+    result?: unknown;
+    results?: Array<{
+      task_index?: number;
+      task_name?: string;
+      ok?: boolean;
+      data?: unknown;
+      error?: string;
+    }>;
+    tasks_run?: number;
+  };
+
+  if (Array.isArray(payload.results)) {
+    const completedLabel = labels?.statusCompleted || "completed";
+    const failedLabel = labels?.statusFailed || "failed";
+    const sections = payload.results.map((item, index) => {
+      const lines = [
+        `## ${index + 1}. ${item.task_name || `Task ${item.task_index ?? index}`}`,
+        item.ok ? `- Status: ${completedLabel}` : `- Status: ${failedLabel}`,
+      ];
+
+      if (item.error) {
+        lines.push("", item.error);
+      }
+
+      const nested =
+        item.data &&
+        typeof item.data === "object" &&
+        "result" in (item.data as Record<string, unknown>)
+          ? (item.data as { result?: unknown }).result
+          : item.data;
+      const rendered = stringifyResult(nested);
+
+      if (rendered) {
+        lines.push("", rendered);
+      }
+
+      return lines.join("\n");
+    });
+
+    const header =
+      payload.message ||
+      (payload.tasks_run
+        ? (labels?.executedTasks || "Executed {count} tasks").replace("{count}", String(payload.tasks_run))
+        : labels?.executionCompleted || "Execution completed");
+    return [`# ${header}`, "", ...sections].join("\n\n");
+  }
+
+  if (payload.result !== undefined) {
+    const message = payload.message ? `# ${payload.message}\n\n` : "";
+    return `${message}${stringifyResult(payload.result)}`.trim();
+  }
+
+  if (payload.error) {
+    return payload.error;
+  }
+
+  return stringifyResult(payload);
+}
+
+function MarkdownResult({ content }: { content: string }) {
+  return (
+    <div className="prose prose-sm max-w-none prose-p:my-1 prose-pre:my-2 prose-ul:my-1 prose-ol:my-1 prose-headings:my-2">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+    </div>
+  );
 }
 
 export default function AgentsPage() {
@@ -82,27 +187,72 @@ export default function AgentsPage() {
   ];
 
   const { user, isLoading: userLoading } = useUser();
+  const WORKER_MODELS = [
+    "cerebras/gpt-oss-120b",
+    "anthropic/claude-sonnet-4.5",
+    "alibaba/qwen-plus",
+    "alibaba/qwen-turbo",
+  ];
 
   const [agents, setAgents] = useState<AgentAssignment[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [serverAgents, setServerAgents] = useState<ServerAgent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [planInfo, setPlanInfo] = useState({ plan: "starter", agentLimit: 2, totalAgents: 0 });
+  const [planInfo, setPlanInfo] = useState({
+    plan: "starter",
+    agentLimit: 2,
+    totalAgents: 0,
+  });
   const [showCreateProject, setShowCreateProject] = useState(false);
-  const [newProject, setNewProject] = useState({ name: "", website: "", description: "" });
+  const [newProject, setNewProject] = useState({
+    name: "",
+    website: "",
+    description: "",
+  });
   const [actionLoading, setActionLoading] = useState(false);
-  const [runningTask, setRunningTask] = useState<{ agentId: number; taskIndex: number; startedAt: number } | null>(null);
-  const [taskResult, setTaskResult] = useState<Record<number, { result?: unknown; message?: string; error?: string }>>({});
-  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
-  const [taskReports, setTaskReports] = useState<Record<number, { task_name: string; summary: string; metrics: Record<string, unknown>; created_at: string }[]>>({});
+  const [runningTask, setRunningTask] = useState<{
+    agentId: number;
+    taskIndex: number;
+    startedAt: number;
+  } | null>(null);
+  const [taskResult, setTaskResult] = useState<
+    Record<number, { result?: unknown; message?: string; error?: string }>
+  >({});
+  const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>(
+    {},
+  );
+  const [taskReports, setTaskReports] = useState<
+    Record<
+      number,
+      {
+        task_name: string;
+        summary: string;
+        metrics: Record<string, unknown>;
+        created_at: string;
+      }[]
+    >
+  >({});
+  const [agentModels, setAgentModels] = useState<Record<number, string>>({});
+  const [savingModelId, setSavingModelId] = useState<number | null>(null);
+  const [availableModels, setAvailableModels] = useState<AgentModelOption[]>([
+    {
+      id: "auto",
+      name: ta.modelAuto || "Auto (Best Available)",
+      available: true,
+    },
+  ]);
 
   const loadData = () => {
     const ts = Date.now();
     return Promise.all([
       fetch(`/api/reports?_t=${ts}`).then((r) => r.json()),
       fetch(`/api/projects?_t=${ts}`).then((r) => r.json()),
-    ]).then(([reportData, projectData]) => {
-      setAgents(projectData.agents || []);
+      fetch(`/api/models?_t=${ts}`)
+        .then((r) => r.json())
+        .catch(() => ({ models: [] })),
+    ]).then(async ([reportData, projectData, modelData]) => {
+      const agentsList = (projectData.agents || []) as AgentAssignment[];
+      setAgents(agentsList);
       setServerAgents(reportData.serverAgents || reportData.reports || []);
       setProjects(projectData.projects || []);
       setPlanInfo({
@@ -110,6 +260,56 @@ export default function AgentsPage() {
         agentLimit: projectData.agentLimit || 2,
         totalAgents: projectData.totalAgents || 0,
       });
+      setAgentModels(
+        Object.fromEntries(
+          agentsList.map((agent) => [
+            agent.id,
+            agent.config?.model || "auto",
+          ]),
+        ),
+      );
+      const models = (
+        (
+          modelData as {
+            models?: { id: string; name: string; available?: boolean }[];
+          }
+        ).models || []
+      )
+        .filter((model) => WORKER_MODELS.includes(model.id))
+        .map((model) => ({
+          id: model.id,
+          name: model.name,
+          available: model.available !== false,
+        }));
+      setAvailableModels([
+        {
+          id: "auto",
+          name: ta.modelAuto || "Auto (Best Available)",
+          available: true,
+        },
+        ...models,
+      ]);
+
+      // Auto-fetch reports for agents that have completed tasks (to show model_used)
+      const agentsWithCompleted = agentsList.filter((a) =>
+        a.config?.tasks?.some((t) => t.status === "completed"),
+      );
+      const reportFetches = agentsWithCompleted.map((a) =>
+        fetch(`/api/agent-reports?agent_id=${a.id}`)
+          .then((r) => r.json())
+          .then((data) => ({ agentId: a.id, reports: data.reports || [] }))
+          .catch(() => ({ agentId: a.id, reports: [] })),
+      );
+      if (reportFetches.length > 0) {
+        const allReports = await Promise.all(reportFetches);
+        setTaskReports((prev) => {
+          const next = { ...prev };
+          for (const { agentId, reports } of allReports) {
+            next[agentId] = reports;
+          }
+          return next;
+        });
+      }
     });
   };
 
@@ -125,38 +325,195 @@ export default function AgentsPage() {
     if (!newProject.name.trim() || actionLoading) return;
     setActionLoading(true);
     try {
-      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_project", ...newProject }) });
-      if (res.ok) { setNewProject({ name: "", website: "", description: "" }); setShowCreateProject(false); await loadData(); }
-    } finally { setActionLoading(false); }
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create_project", ...newProject }),
+      });
+      if (res.ok) {
+        setNewProject({ name: "", website: "", description: "" });
+        setShowCreateProject(false);
+        await loadData();
+      }
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   async function activateAgent(projectId: number, agentType: string) {
     setActionLoading(true);
     try {
-      const res = await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "activate_agent", project_id: projectId, agent_type: agentType, locale }) });
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "activate_agent",
+          project_id: projectId,
+          agent_type: agentType,
+          locale,
+        }),
+      });
       const data = await res.json();
       if (!res.ok) alert(data.error);
       await loadData();
-    } finally { setActionLoading(false); }
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   async function deactivateAgent(agentId: number) {
     if (!confirm(ta.confirmRemoveAgent)) return;
     setActionLoading(true);
     try {
-      await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "deactivate_agent", agent_id: agentId }) });
+      await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "deactivate_agent", agent_id: agentId }),
+      });
       await loadData();
-    } finally { setActionLoading(false); }
+    } finally {
+      setActionLoading(false);
+    }
   }
 
-  async function resolveBlocker(agentId: number, blockerIndex: number, blockerText: string) {
-    const value = prompt(`${ta.resolvePrompt} "${blockerText}"\n\n${ta.resolveHint}`);
+  async function resolveBlocker(
+    agentId: number,
+    blockerIndex: number,
+    blockerText: string,
+  ) {
+    // Auto-resolve: check BYOK keys for service credential blockers
+    const isEmailBlocker = /smtp|email.*service|sendgrid|mailgun|brevo|邮件服务/i.test(blockerText);
+    const isTwitterBlocker = /twitter|x\/twitter/i.test(blockerText);
+    const isWebsiteBlocker = /website url|网站\s*url/i.test(blockerText);
+    const isICPBlocker = /target audience|ideal customer profile|ICP|理想客户|目标受众/i.test(blockerText);
+    const isByokBlocker = isEmailBlocker || isTwitterBlocker;
+
+    // ICP/audience blocker — auto-resolve since Task 0 generates ICP via AI
+    if (isICPBlocker) {
+      const agent = agents.find((a) => a.id === agentId);
+      const plan = (agent?.config as Record<string, unknown>)?.plan as string || "";
+      setActionLoading(true);
+      try {
+        await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "resolve_blocker",
+            agent_id: agentId,
+            blocker_index: blockerIndex,
+            value: plan
+              ? "ICP will be generated by AI based on project description"
+              : "ICP will be generated by AI",
+          }),
+        });
+        await loadData();
+        return;
+      } finally {
+        setActionLoading(false);
+      }
+    }
+
+    // Website URL blocker — check if project already has a website configured
+    if (isWebsiteBlocker) {
+      const agent = agents.find((a) => a.id === agentId);
+      const project = projects.find((p) => p.id === agent?.project_id);
+      if (project?.website) {
+        setActionLoading(true);
+        try {
+          await fetch("/api/projects", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "resolve_blocker",
+              agent_id: agentId,
+              blocker_index: blockerIndex,
+              value: project.website,
+            }),
+          });
+          await loadData();
+          return;
+        } finally {
+          setActionLoading(false);
+        }
+      }
+    }
+
+    // BYOK credential blockers — check user's API keys
+    if (isByokBlocker) {
+      setActionLoading(true);
+      try {
+        const keysRes = await fetch("/api/api-keys");
+        const keysData = await keysRes.json() as { keys?: { service: string }[] };
+        const keys = keysData.keys || [];
+
+        if (isEmailBlocker) {
+          const hasEmail = keys.some((k) => k.service === "sendgrid" || k.service === "brevo");
+          if (hasEmail) {
+            const provider = keys.find((k) => k.service === "sendgrid") ? "SendGrid" : "Brevo";
+            await fetch("/api/projects", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "resolve_blocker",
+                agent_id: agentId,
+                blocker_index: blockerIndex,
+                value: `${provider} API key configured via BYOK`,
+              }),
+            });
+            await loadData();
+            return;
+          }
+        }
+
+        if (isTwitterBlocker) {
+          const hasTwitter = keys.some((k) => k.service === "twitter_api_key");
+          if (hasTwitter) {
+            await fetch("/api/projects", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "resolve_blocker",
+                agent_id: agentId,
+                blocker_index: blockerIndex,
+                value: "Twitter API credentials configured via BYOK",
+              }),
+            });
+            await loadData();
+            return;
+          }
+        }
+
+        // No matching key found — redirect to settings
+        const goToSettings = confirm(ta.apiKeyNotFound);
+        if (goToSettings) {
+          window.location.href = `/${locale}/dashboard/settings#section-byok`;
+        }
+        return;
+      } finally {
+        setActionLoading(false);
+      }
+    }
+
+    const value = prompt(
+      `${ta.resolvePrompt} "${blockerText}"\n\n${ta.resolveHint}`,
+    );
     if (value === null) return;
     setActionLoading(true);
     try {
-      await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "resolve_blocker", agent_id: agentId, blocker_index: blockerIndex, value }) });
+      await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "resolve_blocker",
+          agent_id: agentId,
+          blocker_index: blockerIndex,
+          value,
+        }),
+      });
       await loadData();
-    } finally { setActionLoading(false); }
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   async function executeTask(agentId: number, taskIndex: number) {
@@ -166,39 +523,198 @@ export default function AgentsPage() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000); // 2 min timeout
     try {
-      const res = await fetch("/api/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }), signal: controller.signal });
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }),
+        signal: controller.signal,
+      });
       const data = await res.json();
       if (!res.ok) {
-        setTaskResult((prev) => ({ ...prev, [agentId]: { error: data.error || ta.taskFailed } }));
+        setTaskResult((prev) => ({
+          ...prev,
+          [agentId]: { error: data.error || ta.taskFailed },
+        }));
       } else {
-        setTaskResult((prev) => ({ ...prev, [agentId]: { result: data.result, message: data.message } }));
+        setTaskResult((prev) => ({
+          ...prev,
+          [agentId]: { result: data.result, message: data.message },
+        }));
       }
       await loadData();
     } catch (e) {
-      const msg = e instanceof DOMException && e.name === "AbortError" ? "Task timed out (2 min). It may still be running on the server." : ta.taskFailed;
+      const msg =
+        e instanceof DOMException && e.name === "AbortError"
+          ? ta.taskTimeout
+          : ta.taskFailed;
       setTaskResult((prev) => ({ ...prev, [agentId]: { error: msg } }));
-    } finally { clearTimeout(timeout); setActionLoading(false); setRunningTask(null); }
+    } finally {
+      clearTimeout(timeout);
+      setActionLoading(false);
+      setRunningTask(null);
+    }
+  }
+
+  async function executeTaskBatch(agentId: number, taskIndexes: number[]) {
+    setActionLoading(true);
+    setRunningTask({ agentId, taskIndex: -1, startedAt: Date.now() });
+    setTaskResult((prev) => ({ ...prev, [agentId]: {} }));
+    const results: {
+      task_index: number;
+      task_name: string;
+      ok: boolean;
+      data?: unknown;
+      error?: string;
+    }[] = [];
+
+    try {
+      const agent = agents.find((item) => item.id === agentId);
+      const tasks = agent?.config?.tasks || [];
+
+      for (const taskIndex of taskIndexes) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 120000);
+
+        try {
+          const res = await fetch("/api/execute", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ agent_id: agentId, task_index: taskIndex }),
+            signal: controller.signal,
+          });
+          const data = await res.json();
+          results.push({
+            task_index: taskIndex,
+            task_name: tasks[taskIndex]?.name || `Task ${taskIndex}`,
+            ok: res.ok,
+            data: res.ok ? data.result : undefined,
+            error: !res.ok ? data.error || ta.taskFailed : undefined,
+          });
+
+          if (!res.ok) {
+            setTaskResult((prev) => ({
+              ...prev,
+              [agentId]: {
+                error: ta.runAllStopped,
+                result: { tasks_run: results.length, results },
+              },
+            }));
+            await loadData();
+            return;
+          }
+        } catch (e) {
+          const msg =
+            e instanceof DOMException && e.name === "AbortError"
+              ? "Task timed out (2 min). It may still be running on the server."
+              : ta.taskFailed;
+          results.push({
+            task_index: taskIndex,
+            task_name: tasks[taskIndex]?.name || `Task ${taskIndex}`,
+            ok: false,
+            error: msg,
+          });
+          setTaskResult((prev) => ({
+            ...prev,
+            [agentId]: {
+              error: "Run-all stopped on task failure",
+              result: { tasks_run: results.length, results },
+            },
+          }));
+          await loadData();
+          return;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
+      setTaskResult((prev) => ({
+        ...prev,
+        [agentId]: {
+          message: ta.allTasksCompleted,
+          result: { tasks_run: results.length, results },
+        },
+      }));
+      await loadData();
+    } finally {
+      setActionLoading(false);
+      setRunningTask(null);
+    }
   }
 
   async function runNextTask(agentId: number) {
+    const agent = agents.find((item) => item.id === agentId);
+    if (!agent) return;
+    const tasks = agent.config?.tasks || [];
+    const nextTaskIndex = tasks.findIndex(
+      (task) => task.status === "in_progress" || task.status === "pending",
+    );
+    if (nextTaskIndex === -1) {
+      if (tasks.length === 0) {
+        setTaskResult((prev) => ({
+          ...prev,
+          [agentId]: { message: "No tasks available" },
+        }));
+        return;
+      }
+      return executeTask(agentId, 0);
+    }
+    return executeTask(agentId, nextTaskIndex);
+  }
+
+  async function runAllTasks(agentId: number) {
+    const agent = agents.find((item) => item.id === agentId);
+    const tasks = agent?.config?.tasks || [];
+    const runnableIndexes = tasks
+      .map((task, index) => ({ task, index }))
+      .filter(
+        ({ task }) =>
+          task.status === "in_progress" || task.status === "pending",
+      )
+      .map(({ index }) => index);
+
+    if (tasks.length > 0 && runnableIndexes.length === 0) {
+      return executeTaskBatch(
+        agentId,
+        tasks.map((_, index) => index),
+      );
+    }
+
     setActionLoading(true);
     setRunningTask({ agentId, taskIndex: -1, startedAt: Date.now() });
     setTaskResult((prev) => ({ ...prev, [agentId]: {} }));
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120000);
     try {
-      const res = await fetch("/api/execute", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ agent_id: agentId, action: "run-all" }), signal: controller.signal });
+      const res = await fetch("/api/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agent_id: agentId, action: "run-all" }),
+        signal: controller.signal,
+      });
       const data = await res.json();
       if (!res.ok) {
-        setTaskResult((prev) => ({ ...prev, [agentId]: { error: data.error || ta.taskFailed } }));
+        setTaskResult((prev) => ({
+          ...prev,
+          [agentId]: { error: data.error || ta.taskFailed },
+        }));
       } else {
-        setTaskResult((prev) => ({ ...prev, [agentId]: { result: data.result, message: data.message } }));
+        setTaskResult((prev) => ({
+          ...prev,
+          [agentId]: { result: data.result, message: data.message },
+        }));
       }
       await loadData();
     } catch (e) {
-      const msg = e instanceof DOMException && e.name === "AbortError" ? "Task timed out (2 min). It may still be running on the server." : ta.taskFailed;
+      const msg =
+        e instanceof DOMException && e.name === "AbortError"
+          ? ta.taskTimeout
+          : ta.taskFailed;
       setTaskResult((prev) => ({ ...prev, [agentId]: { error: msg } }));
-    } finally { clearTimeout(timeout); setActionLoading(false); setRunningTask(null); }
+    } finally {
+      clearTimeout(timeout);
+      setActionLoading(false);
+      setRunningTask(null);
+    }
   }
 
   function toggleTaskDetail(agentId: number, taskIndex: number) {
@@ -206,9 +722,14 @@ export default function AgentsPage() {
     setExpandedTasks((prev) => ({ ...prev, [key]: !prev[key] }));
     // Fetch reports for this agent if not loaded yet
     if (!taskReports[agentId]) {
-      fetch(`/api/agent-reports?agent_id=${agentId}`).then((r) => r.json()).then((data) => {
-        setTaskReports((prev) => ({ ...prev, [agentId]: data.reports || [] }));
-      });
+      fetch(`/api/agent-reports?agent_id=${agentId}`)
+        .then((r) => r.json())
+        .then((data) => {
+          setTaskReports((prev) => ({
+            ...prev,
+            [agentId]: data.reports || [],
+          }));
+        });
     }
   }
 
@@ -216,9 +737,41 @@ export default function AgentsPage() {
     if (!confirm(ta.confirmDeleteProject)) return;
     setActionLoading(true);
     try {
-      await fetch("/api/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete_project", project_id: projectId }) });
+      await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete_project",
+          project_id: projectId,
+        }),
+      });
       await loadData();
-    } finally { setActionLoading(false); }
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function updateAgentModel(agentId: number, model: string) {
+    setSavingModelId(agentId);
+    setAgentModels((prev) => ({ ...prev, [agentId]: model }));
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_agent_config",
+          agent_id: agentId,
+          config: { model },
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || ta.modelSaveFailed || "Failed to update model");
+        await loadData();
+      }
+    } finally {
+      setSavingModelId(null);
+    }
   }
 
   if (userLoading) {
@@ -234,7 +787,12 @@ export default function AgentsPage() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <h1 className="text-2xl font-bold mb-4">{ta.signInAgents}</h1>
-          <a href={`/auth/login?returnTo=/${locale}/dashboard/reports`} className="bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors">{tc.logIn}</a>
+          <a
+            href={`/auth/login?returnTo=/${locale}/dashboard/reports`}
+            className="bg-red-800 hover:bg-red-900 text-white px-6 py-3 rounded-lg font-medium transition-colors"
+          >
+            {tc.logIn}
+          </a>
         </div>
       </div>
     );
@@ -251,23 +809,78 @@ export default function AgentsPage() {
           <>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div className="text-sm text-gray-500">
-                <span className="font-medium text-gray-700 capitalize">{planInfo.plan}</span> {ta.plan} — {planInfo.totalAgents}/{planInfo.agentLimit === 999 ? ta.unlimited : planInfo.agentLimit} {ta.agentsUsed}
+                <span className="font-medium text-gray-700 capitalize">
+                  {planInfo.plan}
+                </span>{" "}
+                {ta.plan} — {planInfo.totalAgents}/
+                {planInfo.agentLimit === 999
+                  ? ta.unlimited
+                  : planInfo.agentLimit}{" "}
+                {ta.agentsUsed}
               </div>
-              <button onClick={() => setShowCreateProject(true)} className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">
+              <button
+                onClick={() => setShowCreateProject(true)}
+                className="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+              >
                 {ta.newProject}
               </button>
             </div>
 
             {showCreateProject && (
-              <form onSubmit={createProject} className="bg-white rounded-lg border border-gray-200 p-5 mb-4">
-                <h3 className="font-semibold text-sm mb-3">{ta.createProject}</h3>
+              <form
+                onSubmit={createProject}
+                className="bg-white rounded-lg border border-gray-200 p-5 mb-4"
+              >
+                <h3 className="font-semibold text-sm mb-3">
+                  {ta.createProject}
+                </h3>
                 <div className="space-y-3">
-                  <input type="text" placeholder={ta.projectName} value={newProject.name} onChange={(e) => setNewProject({ ...newProject, name: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" required />
-                  <input type="text" placeholder={ta.websiteUrl} value={newProject.website} onChange={(e) => setNewProject({ ...newProject, website: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500" />
-                  <textarea placeholder={ta.briefDesc} value={newProject.description} onChange={(e) => setNewProject({ ...newProject, description: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none" rows={2} />
+                  <input
+                    type="text"
+                    placeholder={ta.projectName}
+                    value={newProject.name}
+                    onChange={(e) =>
+                      setNewProject({ ...newProject, name: e.target.value })
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder={ta.websiteUrl}
+                    value={newProject.website}
+                    onChange={(e) =>
+                      setNewProject({ ...newProject, website: e.target.value })
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                  <textarea
+                    placeholder={ta.briefDesc}
+                    value={newProject.description}
+                    onChange={(e) =>
+                      setNewProject({
+                        ...newProject,
+                        description: e.target.value,
+                      })
+                    }
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                    rows={2}
+                  />
                   <div className="flex gap-2">
-                    <button type="submit" disabled={actionLoading || !newProject.name.trim()} className="bg-red-800 hover:bg-red-900 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer">{tc.create}</button>
-                    <button type="button" onClick={() => setShowCreateProject(false)} className="text-gray-500 hover:text-gray-700 px-4 py-2 text-sm cursor-pointer">{tc.cancel}</button>
+                    <button
+                      type="submit"
+                      disabled={actionLoading || !newProject.name.trim()}
+                      className="bg-red-800 hover:bg-red-900 disabled:bg-gray-300 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                    >
+                      {tc.create}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateProject(false)}
+                      className="text-gray-500 hover:text-gray-700 px-4 py-2 text-sm cursor-pointer"
+                    >
+                      {tc.cancel}
+                    </button>
                   </div>
                 </div>
               </form>
@@ -281,115 +894,335 @@ export default function AgentsPage() {
             )}
 
             {projects.map((project) => {
-              const projectAgents = agents.filter((a) => a.project_name === project.name);
+              const projectAgents = agents.filter(
+                (a) => a.project_name === project.name,
+              );
               const assignedTypes = projectAgents.map((a) => a.agent_type);
-              const availableToAdd = AGENT_OPTIONS.filter((a) => !assignedTypes.includes(a.type));
+              const availableToAdd = AGENT_OPTIONS.filter(
+                (a) => !assignedTypes.includes(a.type),
+              );
 
               return (
                 <div key={project.id} className="mb-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
                     <div>
-                      <h2 className="text-base font-semibold">{project.name}</h2>
-                      {project.website && <p className="text-xs text-gray-400 break-all">{project.website}</p>}
+                      <h2 className="text-base font-semibold">
+                        {project.name}
+                      </h2>
+                      {project.website && (
+                        <p className="text-xs text-gray-400 break-all">
+                          {project.website}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {availableToAdd.length > 0 && planInfo.totalAgents < planInfo.agentLimit && (
-                        <select
-                          onChange={(e) => { if (e.target.value) { activateAgent(project.id, e.target.value); e.target.value = ""; } }}
-                          className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500"
-                          defaultValue=""
-                        >
-                          <option value="" disabled>{ta.addAgent}</option>
-                          {availableToAdd.map((a) => (<option key={a.type} value={a.type}>{a.label}</option>))}
-                        </select>
-                      )}
-                      <button onClick={() => deleteProject(project.id)} className="text-xs text-red-400 hover:text-red-600 cursor-pointer">{tc.delete}</button>
+                      {availableToAdd.length > 0 &&
+                        planInfo.totalAgents < planInfo.agentLimit && (
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                activateAgent(project.id, e.target.value);
+                                e.target.value = "";
+                              }
+                            }}
+                            className="border border-gray-300 rounded-lg px-2 py-1.5 text-xs text-gray-600 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500"
+                            defaultValue=""
+                          >
+                            <option value="" disabled>
+                              {ta.addAgent}
+                            </option>
+                            {availableToAdd.map((a) => (
+                              <option key={a.type} value={a.type}>
+                                {a.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      <button
+                        onClick={() => deleteProject(project.id)}
+                        className="text-xs text-red-400 hover:text-red-600 cursor-pointer"
+                      >
+                        {tc.delete}
+                      </button>
                     </div>
                   </div>
 
                   {projectAgents.length === 0 ? (
-                    <p className="text-sm text-gray-400 bg-white rounded-lg border border-gray-200 p-4">{ta.noAgents}</p>
+                    <p className="text-sm text-gray-400 bg-white rounded-lg border border-gray-200 p-4">
+                      {ta.noAgents}
+                    </p>
                   ) : (
                     <div className="space-y-3">
                       {projectAgents.map((agent) => {
                         const config = agent.config || {};
                         const tasks = config.tasks || [];
-                        const blockers = (config.blockers || []).filter((b) => !b.toLowerCase().includes("linkedin"));
-                        const completedTasks = tasks.filter((t) => t.status === "completed").length;
-                        const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;
-                        const progress = tasks.length > 0 ? Math.round((completedTasks / tasks.length) * 100) : 0;
+                        const blockers = (config.blockers || []).filter(
+                          (b) => !b.toLowerCase().includes("linkedin"),
+                        );
+                        const completedTasks = tasks.filter(
+                          (t) => t.status === "completed",
+                        ).length;
+                        const inProgressTasks = tasks.filter(
+                          (t) => t.status === "in_progress",
+                        ).length;
+                        const progress =
+                          tasks.length > 0
+                            ? Math.round((completedTasks / tasks.length) * 100)
+                            : 0;
 
                         return (
-                          <div key={agent.id} className="bg-white rounded-lg border border-gray-200 p-5">
+                          <div
+                            key={agent.id}
+                            className="bg-white rounded-lg border border-gray-200 p-5"
+                          >
                             <div className="flex items-center justify-between mb-3">
-                              <h3 className="font-semibold text-sm">{agent.agent_type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</h3>
+                              <div>
+                                <h3 className="font-semibold text-sm">
+                                  {agent.agent_type
+                                    .replace(/_/g, " ")
+                                    .replace(/\b\w/g, (c) => c.toUpperCase())
+                                    .replace(/\bSeo\b/g, "SEO")}
+                                  <span className="ml-1.5 text-[10px] text-gray-400 font-normal">#{agent.id}</span>
+                                </h3>
+                                <p className="text-xs text-gray-400">
+                                  {agent.project_name}
+                                  {agent.project_id
+                                    ? ` (#${agent.project_id})`
+                                    : ""}
+                                </p>
+                              </div>
                               <div className="flex items-center gap-2">
-                                {(inProgressTasks > 0 || tasks.some((t) => t.status === "pending")) && (
-                                  <button onClick={() => runNextTask(agent.id)} disabled={actionLoading} className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer">{ta.runNext}</button>
+                                {tasks.length > 0 && (
+                                  <>
+                                    <button
+                                      onClick={() => runNextTask(agent.id)}
+                                      disabled={actionLoading}
+                                      className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer"
+                                    >
+                                      {ta.runNext}
+                                    </button>
+                                    <button
+                                      onClick={() => runAllTasks(agent.id)}
+                                      disabled={actionLoading}
+                                      className="bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer"
+                                    >
+                                      {ta.runAll || "Run All"}
+                                    </button>
+                                  </>
                                 )}
-                                {statusBadge(agent.status)}
-                                <button onClick={() => deactivateAgent(agent.id)} className="text-xs text-red-400 hover:text-red-600 cursor-pointer">{tc.remove}</button>
+                                {statusBadge(agent.status, locale)}
+                                <button
+                                  onClick={() => deactivateAgent(agent.id)}
+                                  className="text-xs text-red-400 hover:text-red-600 cursor-pointer"
+                                >
+                                  {tc.remove}
+                                </button>
                               </div>
                             </div>
 
                             {config.plan && (
                               <div className="mb-3">
-                                <p className="text-xs font-medium text-gray-500 mb-1">{ta.planLabel}</p>
-                                <p className="text-sm text-gray-600">{config.plan}</p>
+                                <p className="text-xs font-medium text-gray-500 mb-1">
+                                  {ta.planLabel}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {config.plan}
+                                </p>
                               </div>
                             )}
+
+                            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <div>
+                                <p className="text-xs font-medium text-gray-500 mb-1">
+                                  {ta.modelLabel || "Model"}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {ta.modelHint ||
+                                    "Choose which model this AI employee should use for future tasks."}
+                                </p>
+                              </div>
+                              <select
+                                value={
+                                  agentModels[agent.id] ||
+                                  config.model ||
+                                  "auto"
+                                }
+                                onChange={(e) =>
+                                  updateAgentModel(agent.id, e.target.value)
+                                }
+                                disabled={savingModelId === agent.id}
+                                className="border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-700 cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500 min-w-[220px] disabled:opacity-60"
+                              >
+                                {availableModels.map((model) => (
+                                  <option
+                                    key={model.id}
+                                    value={model.id}
+                                    disabled={!model.available}
+                                  >
+                                    {model.name}
+                                    {!model.available
+                                      ? ` - ${ta.modelUnavailable || "Unavailable"}`
+                                      : ""}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
 
                             {tasks.length > 0 && (
                               <div className="mb-3">
                                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
-                                  <span className="font-medium">{ta.executionProgress}</span>
-                                  <span>{completedTasks}/{tasks.length} {ta.tasks} ({progress}%)</span>
+                                  <span className="font-medium">
+                                    {ta.executionProgress}
+                                  </span>
+                                  <span>
+                                    {completedTasks}/{tasks.length} {ta.tasks} (
+                                    {progress}%)
+                                  </span>
                                 </div>
                                 <div className="w-full bg-gray-100 rounded-full h-2">
-                                  <div className="bg-red-500 h-2 rounded-full transition-all" style={{ width: `${Math.max(progress, inProgressTasks > 0 ? 8 : 0)}%` }} />
+                                  <div
+                                    className="bg-red-500 h-2 rounded-full transition-all"
+                                    style={{
+                                      width: `${Math.max(progress, inProgressTasks > 0 ? 8 : 0)}%`,
+                                    }}
+                                  />
                                 </div>
                               </div>
                             )}
 
                             {tasks.length > 0 && (
                               <div className="mb-3">
-                                <p className="text-xs font-medium text-gray-500 mb-2">{ta.tasksLabel}</p>
+                                <p className="text-xs font-medium text-gray-500 mb-2">
+                                  {ta.tasksLabel}
+                                </p>
                                 <div className="space-y-1">
                                   {tasks.map((task, i) => {
                                     const taskKey = `${agent.id}-${i}`;
                                     const isExpanded = expandedTasks[taskKey];
                                     const reports = taskReports[agent.id] || [];
-                                    const matchedReport = reports.find((_r, idx) => idx === i) || reports.find((r) => task.name.toLowerCase().includes(r.task_name.toLowerCase().split(" ")[0]));
-                                    const isThisTaskRunning = runningTask?.agentId === agent.id && (runningTask.taskIndex === i || runningTask.taskIndex === -1);
+                                    // Match report to task by task_index in metrics (precise), fallback to name matching
+                                    const matchedReport =
+                                      reports.find((r) => r.metrics?.task_index === i) ||
+                                      reports.find((r) => {
+                                        if (r.metrics?.task_index !== undefined) return false; // already indexed, skip fuzzy
+                                        const rName = r.task_name.toLowerCase();
+                                        const tName = task.name.toLowerCase();
+                                        return rName === tName
+                                          || tName.includes(rName)
+                                          || rName.includes(tName);
+                                      });
+                                    const isThisTaskRunning =
+                                      runningTask?.agentId === agent.id &&
+                                      (runningTask.taskIndex === i ||
+                                        runningTask.taskIndex === -1);
 
                                     return (
                                       <div key={i}>
                                         <div className="flex items-start gap-2 text-xs">
                                           <span className="mt-0.5 flex-shrink-0">
-                                            {isThisTaskRunning
-                                              ? <span className="text-yellow-500 animate-spin inline-block">&#9696;</span>
-                                              : task.status === "completed" ? <span className="text-green-500">&#10003;</span> : task.status === "in_progress" ? <span className="text-red-500">&#9679;</span> : <span className="text-gray-300">&#9675;</span>}
+                                            {isThisTaskRunning ? (
+                                              <span className="text-yellow-500 animate-spin inline-block">
+                                                &#9696;
+                                              </span>
+                                            ) : task.status === "completed" ? (
+                                              <span className="text-green-500">
+                                                &#10003;
+                                              </span>
+                                            ) : task.status ===
+                                              "in_progress" ? (
+                                              <span className="text-red-500">
+                                                &#9679;
+                                              </span>
+                                            ) : (
+                                              <span className="text-gray-300">
+                                                &#9675;
+                                              </span>
+                                            )}
                                           </span>
-                                          <span className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}>
+                                          <span
+                                            className={`flex-1 ${task.status === "completed" ? "text-gray-400 line-through" : task.status === "in_progress" ? "text-gray-700 font-medium" : "text-gray-500"}`}
+                                          >
                                             {task.name}
-                                            {isThisTaskRunning && <RunningTimer startedAt={runningTask!.startedAt} />}
+                                            {isThisTaskRunning && (
+                                              <RunningTimer
+                                                startedAt={
+                                                  runningTask!.startedAt
+                                                }
+                                              />
+                                            )}
+                                            {task.status === "completed" && (
+                                                <span className="ml-1 no-underline inline-block px-1.5 py-0 rounded bg-purple-50 text-purple-600 text-[10px] font-medium" style={{ textDecoration: 'none' }}>
+                                                  {(() => {
+                                                    // Resolve actual model: task stamp > report metrics > fallback
+                                                    const modelUsed = task.model_used || String(matchedReport?.metrics?.model_used || "");
+                                                    const useMode = task.use_mode || String(matchedReport?.metrics?.preferred_model || config.model || "auto");
+                                                    if (modelUsed && modelUsed !== "none" && modelUsed !== "auto") {
+                                                      return `${modelUsed} (${useMode})`;
+                                                    }
+                                                    if (modelUsed === "none") {
+                                                      return ta.noModel;
+                                                    }
+                                                    return useMode;
+                                                  })()}
+                                                </span>
+                                              )}
                                           </span>
-                                          {task.status === "completed" && task.result && (
-                                            <button onClick={() => toggleTaskDetail(agent.id, i)} className="text-xs text-blue-500 hover:text-blue-700 font-medium whitespace-nowrap cursor-pointer">
-                                              {isExpanded ? "Hide" : "Log"}
+                                          {task.status === "completed" && (
+                                              <button
+                                                onClick={() =>
+                                                  toggleTaskDetail(agent.id, i)
+                                                }
+                                                className="text-xs text-blue-500 hover:text-blue-700 font-medium whitespace-nowrap cursor-pointer"
+                                              >
+                                                {isExpanded ? ta.logHide : ta.logShow}
+                                              </button>
+                                            )}
+                                          {!isThisTaskRunning && (
+                                            <button
+                                              onClick={() =>
+                                                executeTask(agent.id, i)
+                                              }
+                                              disabled={actionLoading}
+                                              className="text-xs text-green-500 hover:text-green-700 font-medium whitespace-nowrap cursor-pointer"
+                                            >
+                                              {tc.run}
                                             </button>
                                           )}
-                                          {(task.status === "in_progress" || task.status === "pending") && !isThisTaskRunning && (
-                                            <button onClick={() => executeTask(agent.id, i)} disabled={actionLoading} className="text-xs text-green-500 hover:text-green-700 font-medium whitespace-nowrap cursor-pointer">{tc.run}</button>
-                                          )}
                                         </div>
-                                        {isExpanded && task.result && (
+                                        {isExpanded && (
                                           <div className="ml-6 mt-1 mb-2 bg-gray-50 border border-gray-100 rounded-md p-2">
-                                            <p className="text-xs text-gray-500 mb-1">{task.result}</p>
+                                            <div className="flex items-center gap-2 mb-2 text-xs">
+                                              <span className="text-gray-400">{ta.modelUsedLabel}</span>
+                                              <span className="px-1.5 py-0.5 rounded bg-purple-50 text-purple-600 font-medium">
+                                                {(() => {
+                                                  const m = task.model_used || String(matchedReport?.metrics?.model_used || "");
+                                                  return m === "none" ? ta.noModel : (m || config.model || "auto");
+                                                })()}
+                                              </span>
+                                              <span className="text-gray-400">{ta.useModeLabel}</span>
+                                              <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 font-medium">
+                                                {task.use_mode || String(matchedReport?.metrics?.preferred_model || config.model || "auto")}
+                                              </span>
+                                            </div>
+                                            {task.result && (
+                                              <MarkdownResult
+                                                content={String(task.result)}
+                                              />
+                                            )}
                                             {matchedReport && (
-                                              <pre className="text-xs text-gray-600 whitespace-pre-wrap break-words max-h-60 overflow-y-auto bg-white rounded p-2 mt-1">
-                                                {JSON.stringify(matchedReport.metrics, null, 2)}
-                                              </pre>
+                                              <div className="text-xs text-gray-600 max-h-60 overflow-y-auto bg-white rounded p-2 mt-1">
+                                                <div className="mb-1 font-medium">
+                                                  {ta.metricsLabel}
+                                                </div>
+                                                <MarkdownResult
+                                                  content={stringifyResult(
+                                                    matchedReport.metrics,
+                                                  )}
+                                                />
+                                              </div>
+                                            )}
+                                            {!task.result && !matchedReport && (
+                                              <p className="text-xs text-gray-400">{ta.noModel}</p>
                                             )}
                                           </div>
                                         )}
@@ -402,50 +1235,63 @@ export default function AgentsPage() {
 
                             {blockers.length > 0 && (
                               <div className="bg-red-50 border border-red-100 rounded-md p-3">
-                                <p className="text-xs font-medium text-red-600 mb-1">{ta.blockers}</p>
+                                <p className="text-xs font-medium text-red-600 mb-1">
+                                  {ta.blockers}
+                                </p>
                                 <ul className="text-xs text-red-500 space-y-1">
                                   {blockers.map((b, i) => (
-                                    <li key={i} className="flex items-center justify-between gap-2">
+                                    <li
+                                      key={i}
+                                      className="flex items-center justify-between gap-2"
+                                    >
                                       <div className="flex items-start gap-1.5">
-                                        <span className="mt-0.5 flex-shrink-0">!</span>
+                                        <span className="mt-0.5 flex-shrink-0">
+                                          !
+                                        </span>
                                         <span>{b}</span>
                                       </div>
-                                      <button onClick={() => resolveBlocker(agent.id, i, b)} disabled={actionLoading} className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap cursor-pointer">{tc.resolve}</button>
+                                      <button
+                                        onClick={() =>
+                                          resolveBlocker(agent.id, i, b)
+                                        }
+                                        disabled={actionLoading}
+                                        className="text-xs text-red-500 hover:text-red-700 font-medium whitespace-nowrap cursor-pointer"
+                                      >
+                                        {tc.resolve}
+                                      </button>
                                     </li>
                                   ))}
                                 </ul>
                               </div>
                             )}
 
-                            {/* Task execution result */}
-                            {taskResult[agent.id] && (taskResult[agent.id].result || taskResult[agent.id].message || taskResult[agent.id].error) && (
-                              <div className={`mt-3 rounded-md p-3 ${taskResult[agent.id].error ? "bg-red-50 border border-red-100" : "bg-green-50 border border-green-100"}`}>
-                                <div className="flex items-center justify-between mb-1">
-                                  <p className={`text-xs font-medium ${taskResult[agent.id].error ? "text-red-600" : "text-green-700"}`}>
-                                    {taskResult[agent.id].error ? ta.taskFailed : "Result"}
-                                  </p>
-                                  <button
-                                    onClick={() => setTaskResult((prev) => { const n = { ...prev }; delete n[agent.id]; return n; })}
-                                    className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
-                                  >
-                                    &times;
-                                  </button>
+                            {/* Task execution error */}
+                            {taskResult[agent.id]?.error && (
+                                <div className="mt-3 rounded-md p-3 bg-red-50 border border-red-100">
+                                  <div className="flex items-center justify-between mb-1">
+                                    <p className="text-xs font-medium text-red-600">
+                                      {ta.taskFailed}
+                                    </p>
+                                    <button
+                                      onClick={() =>
+                                        setTaskResult((prev) => {
+                                          const n = { ...prev };
+                                          delete n[agent.id];
+                                          return n;
+                                        })
+                                      }
+                                      className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                                    >
+                                      &times;
+                                    </button>
+                                  </div>
+                                  <div className="text-xs text-red-500">
+                                    <MarkdownResult
+                                      content={String(taskResult[agent.id].error)}
+                                    />
+                                  </div>
                                 </div>
-                                {taskResult[agent.id].error && (
-                                  <p className="text-xs text-red-500">{taskResult[agent.id].error}</p>
-                                )}
-                                {taskResult[agent.id].message && (
-                                  <p className="text-xs text-green-600">{taskResult[agent.id].message}</p>
-                                )}
-                                {taskResult[agent.id].result != null && (
-                                  <pre className="text-xs text-gray-700 mt-1 whitespace-pre-wrap break-words max-h-60 overflow-y-auto bg-white/60 rounded p-2">
-                                    {typeof taskResult[agent.id].result === "string"
-                                      ? String(taskResult[agent.id].result)
-                                      : JSON.stringify(taskResult[agent.id].result, null, 2)}
-                                  </pre>
-                                )}
-                              </div>
-                            )}
+                              )}
                           </div>
                         );
                       })}
@@ -459,7 +1305,9 @@ export default function AgentsPage() {
             <section className="mt-8">
               <div className="mb-4">
                 <h2 className="text-lg font-semibold">{ta.serverAgents}</h2>
-                <p className="text-xs text-gray-400 mt-1">{ta.serverAgentsDesc}</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {ta.serverAgentsDesc}
+                </p>
               </div>
               {serverAgents.length === 0 ? (
                 <div className="bg-white rounded-lg border border-gray-200 p-6 text-center">
@@ -474,46 +1322,148 @@ export default function AgentsPage() {
                       paused: "bg-yellow-100 text-yellow-700",
                       completed: "bg-gray-100 text-gray-600",
                     };
-                    const categoryLabels: Record<string, Record<string, string>> = {
-                      en: { lead_generation: "Lead Gen", email_marketing: "Email", seo: "SEO", social_media: "Social", monitoring: "Monitor", project_mgmt: "PM", engineering: "Eng", sales: "Sales", other: "Other" },
-                      zh: { lead_generation: "潜在客户", email_marketing: "邮件", seo: "SEO", social_media: "社交", monitoring: "监控", project_mgmt: "项目", engineering: "工程", sales: "销售", other: "其他" },
+                    const categoryLabels: Record<
+                      string,
+                      Record<string, string>
+                    > = {
+                      en: {
+                        lead_generation: "Lead Gen",
+                        email_marketing: "Email",
+                        seo: "SEO",
+                        social_media: "Social",
+                        monitoring: "Monitor",
+                        project_mgmt: "PM",
+                        engineering: "Eng",
+                        sales: "Sales",
+                        other: "Other",
+                      },
+                      zh: {
+                        lead_generation: "潜在客户",
+                        email_marketing: "邮件",
+                        seo: "SEO",
+                        social_media: "社交",
+                        monitoring: "监控",
+                        project_mgmt: "项目",
+                        engineering: "工程",
+                        sales: "销售",
+                        other: "其他",
+                      },
                     };
-                    const catLabel = categoryLabels[locale]?.[sa.period] || categoryLabels.en[sa.period] || sa.period;
-                    const metricEntries = Object.entries(sa.metrics || {}).filter(([, v]) => v !== 0 && v !== "0");
-                    const statusLabels: Record<string, Record<string, string>> = {
-                      en: { active: "active", pending: "pending", paused: "paused", completed: "completed" },
-                      zh: { active: "运行正常", pending: "待运行", paused: "已暂停", completed: "已完成" },
+                    const catLabel =
+                      categoryLabels[locale]?.[sa.period] ||
+                      categoryLabels.en[sa.period] ||
+                      sa.period;
+                    const metricEntries = Object.entries(
+                      sa.metrics || {},
+                    ).filter(([, v]) => v !== 0 && v !== "0");
+                    const statusLabels: Record<
+                      string,
+                      Record<string, string>
+                    > = {
+                      en: {
+                        active: "active",
+                        pending: "pending",
+                        paused: "paused",
+                        completed: "completed",
+                      },
+                      zh: {
+                        active: "运行正常",
+                        pending: "待运行",
+                        paused: "已暂停",
+                        completed: "已完成",
+                      },
                     };
-                    const metricLabels: Record<string, Record<string, string>> = {
-                      en: { emails_sent: "Sent", delivered: "Delivered", opened: "Opened", clicked: "Clicked", contacts_found: "Contacts", articles: "Articles", backlinks: "Backlinks", duration_sec: "Duration(s)", errors: "Errors" },
-                      zh: { emails_sent: "已发送", delivered: "已送达", opened: "已打开", clicked: "已点击", contacts_found: "联系人", articles: "文章", backlinks: "外链", duration_sec: "耗时(秒)", errors: "错误" },
+                    const metricLabels: Record<
+                      string,
+                      Record<string, string>
+                    > = {
+                      en: {
+                        emails_sent: "Sent",
+                        delivered: "Delivered",
+                        opened: "Opened",
+                        clicked: "Clicked",
+                        contacts_found: "Contacts",
+                        articles: "Articles",
+                        backlinks: "Backlinks",
+                        duration_sec: "Duration(s)",
+                        errors: "Errors",
+                      },
+                      zh: {
+                        emails_sent: "已发送",
+                        delivered: "已送达",
+                        opened: "已打开",
+                        clicked: "已点击",
+                        contacts_found: "联系人",
+                        articles: "文章",
+                        backlinks: "外链",
+                        duration_sec: "耗时(秒)",
+                        errors: "错误",
+                      },
                     };
                     return (
-                      <div key={sa.id} className="bg-white rounded-lg border border-gray-200 px-4 py-3">
+                      <div
+                        key={sa.id}
+                        className="bg-white rounded-lg border border-gray-200 px-4 py-3"
+                      >
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm truncate">{sa.agent.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}</span>
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[sa.status] || "bg-gray-100 text-gray-600"}`}>
+                              <span className="font-medium text-sm truncate">
+                                {sa.agent
+                                  .replace(/-/g, " ")
+                                  .replace(/\b\w/g, (c) => c.toUpperCase())}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[sa.status] || "bg-gray-100 text-gray-600"}`}
+                              >
                                 {statusLabels[locale]?.[sa.status] || sa.status}
                               </span>
                             </div>
                             <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
                               <span>{sa.project}</span>
-                              <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{catLabel}</span>
-                              {sa.last_run ? <span>{ta.lastRunAt}: {new Date(sa.last_run).toLocaleString(locale === "zh" ? "zh-CN" : "en-US")}</span> : <span className="italic">{locale === "zh" ? "等待首次运行" : "Awaiting first run"}</span>}
+                              <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
+                                {catLabel}
+                              </span>
+                              {sa.last_run ? (
+                                <span>
+                                  {ta.lastRunAt}:{" "}
+                                  {new Date(sa.last_run).toLocaleString(
+                                    locale === "zh" ? "zh-CN" : "en-US",
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="italic">
+                                  {locale === "zh"
+                                    ? "等待首次运行"
+                                    : "Awaiting first run"}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
                         {sa.summary && (
-                          <p className="text-xs text-gray-500 mt-2">{sa.summary}</p>
+                          <p className="text-xs text-gray-500 mt-2">
+                            {sa.summary}
+                          </p>
                         )}
                         {metricEntries.length > 0 && (
                           <div className="flex flex-wrap gap-2 mt-2">
                             {metricEntries.map(([key, value]) => (
-                              <span key={key} className="bg-gray-50 px-2 py-1 rounded text-xs">
-                                <span className="text-gray-400">{metricLabels[locale]?.[key] || metricLabels.en[key] || key.replace(/_/g, " ")}:</span>{" "}
-                                <span className="font-medium text-gray-700">{typeof value === "number" ? value.toLocaleString() : value}</span>
+                              <span
+                                key={key}
+                                className="bg-gray-50 px-2 py-1 rounded text-xs"
+                              >
+                                <span className="text-gray-400">
+                                  {metricLabels[locale]?.[key] ||
+                                    metricLabels.en[key] ||
+                                    key.replace(/_/g, " ")}
+                                  :
+                                </span>{" "}
+                                <span className="font-medium text-gray-700">
+                                  {typeof value === "number"
+                                    ? value.toLocaleString()
+                                    : value}
+                                </span>
                               </span>
                             ))}
                           </div>
@@ -524,7 +1474,6 @@ export default function AgentsPage() {
                 </div>
               )}
             </section>
-
           </>
         )}
       </div>

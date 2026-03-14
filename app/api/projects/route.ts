@@ -49,7 +49,7 @@ const AGENT_PLANS: Record<string, Record<string, object>> = {
       plan: "Define ideal customer profile, build lead database from multiple sources, score and qualify leads, deliver enriched lead lists.",
       tasks: [
         { name: "Define ICP and qualification criteria", status: "in_progress" },
-        { name: "Set up data sources (LinkedIn, Apollo, etc.)", status: "pending" },
+        { name: "Verify available data sources", status: "pending" },
         { name: "Build initial lead list (200+ leads)", status: "pending" },
         { name: "Enrich leads with company & contact data", status: "pending" },
         { name: "Score and prioritize leads", status: "pending" },
@@ -248,7 +248,7 @@ export async function GET(req: NextRequest) {
 // POST: create project or manage agents
 export async function POST(req: NextRequest) {
   const ip = getIp(req);
-  if (!checkRateLimit(ip, { limit: 20, windowMs: 60_000 })) {
+  if (!checkRateLimit(ip, { limit: 60, windowMs: 60_000 })) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
@@ -319,6 +319,14 @@ export async function POST(req: NextRequest) {
     const localePlans = AGENT_PLANS[locale] || AGENT_PLANS.en;
     const config: Record<string, unknown> = { ...(localePlans[agent_type] || {}) };
 
+    // Inject project metadata into agent config
+    const projectMeta = await sql`SELECT website, description, name FROM projects WHERE id = ${project_id}`;
+    if (projectMeta.length > 0) {
+      if (projectMeta[0].website) config.website = projectMeta[0].website;
+      if (projectMeta[0].description) config.project_description = projectMeta[0].description;
+      if (projectMeta[0].name) config.project_name = projectMeta[0].name;
+    }
+
     // Auto-resolve blockers if user already has the required BYOK keys
     if (config.blockers && Array.isArray(config.blockers) && config.blockers.length > 0) {
       const userKeys = await sql`SELECT service FROM user_api_keys WHERE user_id = ${userId}`;
@@ -328,14 +336,36 @@ export async function POST(req: NextRequest) {
       const blockerKeyMap: Record<string, string[]> = {
         "X/Twitter API": ["twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret"],
         "Brevo": ["brevo"],
+        "SendGrid": ["sendgrid"],
         "Apollo": ["apollo"],
         "Hunter": ["hunter"],
+        "Snov": ["snov_api_id", "snov_api_secret"],
         "OpenAI": ["openai"],
         "Anthropic": ["anthropic"],
         "Google": ["google"],
+        "Alibaba": ["alibaba"],
+        "Qwen": ["alibaba"],
       };
 
+      // ICP/audience blockers are auto-resolved — Task 0 generates ICP via AI
+      const icpPattern = /target audience|ideal customer profile|ICP|理想客户|目标受众/i;
+      // SMTP/email blockers can be resolved by either SendGrid or Brevo
+      const emailPattern = /smtp|email.*service|邮件服务/i;
+      // Website URL blockers auto-resolve if project has a website
+      const websitePattern = /website url|网站\s*url|site audit|站点审计/i;
+
       config.blockers = (config.blockers as string[]).filter((blocker: string) => {
+        // Auto-remove ICP blockers (handled by AI in task 0)
+        if (icpPattern.test(blocker)) return false;
+
+        // Auto-remove website blockers if project has a website configured
+        if (websitePattern.test(blocker) && config.website) return false;
+
+        // Auto-remove email/SMTP blockers if user has any email provider key
+        if (emailPattern.test(blocker)) {
+          return !(keyServices.has("sendgrid") || keyServices.has("brevo"));
+        }
+
         for (const [pattern, requiredKeys] of Object.entries(blockerKeyMap)) {
           if (blocker.includes(pattern)) {
             return !requiredKeys.every((k) => keyServices.has(k));

@@ -150,7 +150,7 @@ export const inviteTeamMemberSchema = z.object({
 });
 
 // ── API Keys (BYOK) ──
-const allowedService = z.enum(["brevo", "apollo", "hunter", "openai", "anthropic", "google", "vercel", "clawhub", "twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret", "worker_url", "worker_secret"]);
+const allowedService = z.enum(["brevo", "sendgrid", "apollo", "apify", "hunter", "snov_api_id", "snov_api_secret", "openai", "anthropic", "google", "alibaba", "vercel", "clawhub", "twitter_api_key", "twitter_api_secret", "twitter_access_token", "twitter_access_token_secret", "worker_url", "worker_secret"]);
 
 export const upsertApiKeySchema = z.object({
   action: z.literal("upsert"),
@@ -181,6 +181,56 @@ export const apiKeyActionSchema = z.discriminatedUnion("action", [
   deleteApiKeySchema,
   createPlatformKeySchema,
   revokePlatformKeySchema,
+]);
+
+// ── Business Partners ──
+const partnerType = z.enum(["supplier", "vendor", "distributor", "reseller", "partner", "other"]);
+const partnerStatus = z.enum(["active", "inactive", "pending"]);
+
+export const createPartnerSchema = z.object({
+  action: z.literal("create"),
+  name: shortText,
+  contact_person: z.string().max(255).optional().nullable(),
+  email: z.string().email().max(255).optional().or(z.literal("")),
+  phone: z.string().max(50).optional().nullable(),
+  website: url,
+  address: longText,
+  partner_type: partnerType.optional(),
+  status: partnerStatus.optional(),
+  description: longText,
+  notes: longText,
+  tags: z.array(z.string().max(100)).max(20).optional(),
+  logo_url: url,
+  discount: z.string().max(100).optional().nullable(),
+});
+
+export const updatePartnerSchema = z.object({
+  action: z.literal("update"),
+  id,
+  name: shortText.optional(),
+  contact_person: z.string().max(255).optional().nullable(),
+  email: z.string().email().max(255).optional().or(z.literal("")),
+  phone: z.string().max(50).optional().nullable(),
+  website: url,
+  address: longText,
+  partner_type: partnerType.optional(),
+  status: partnerStatus.optional(),
+  description: longText,
+  notes: longText,
+  tags: z.array(z.string().max(100)).max(20).optional(),
+  logo_url: url,
+  discount: z.string().max(100).optional().nullable(),
+});
+
+export const deletePartnerSchema = z.object({
+  action: z.literal("delete"),
+  id,
+});
+
+export const partnerActionSchema = z.discriminatedUnion("action", [
+  createPartnerSchema,
+  updatePartnerSchema,
+  deletePartnerSchema,
 ]);
 
 // ── Helper ──
