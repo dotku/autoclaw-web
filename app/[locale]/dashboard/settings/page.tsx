@@ -752,6 +752,7 @@ export default function SettingsPage() {
               { service: "alibaba", name: ts.byokAlibaba, hint: ts.byokAlibabaHint },
               { service: "vercel", name: ts.byokVercel, hint: ts.byokVercelHint },
               { service: "clawhub", name: ts.byokClawhub, hint: ts.byokClawhubHint },
+              { service: "xpilot", name: ts.byokXpilot, hint: ts.byokXpilotHint },
               { service: "brevo", name: ts.byokBravo, hint: ts.byokBrevoHint },
               { service: "sendgrid", name: ts.byokSendGrid, hint: ts.byokSendGridHint },
               ...(userPlan === "enterprise" || userPlan === "scale" ? [
@@ -1231,6 +1232,134 @@ export default function SettingsPage() {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ action: "delete", service: wk.service }),
+                                });
+                              }
+                              setByokMsg(ts.byokDeleted);
+                              setByokEditing(null);
+                              const data = await fetch("/api/api-keys").then((r) => r.json());
+                              setApiKeys(data.keys || []);
+                              setTimeout(() => setByokMsg(""), 3000);
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 px-3 py-1.5 rounded border border-red-200 transition-colors cursor-pointer"
+                          >
+                            {ts.byokDelete}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            {/* TikTok - 2 keys grouped */}
+            {(() => {
+              const tiktokKeys = [
+                { service: "tiktok_client_key" as const, name: ts.byokTiktokClientKey },
+                { service: "tiktok_client_secret" as const, name: ts.byokTiktokClientSecret },
+              ];
+              const tiktokConfigured = tiktokKeys.filter((k) => apiKeys.some((a) => a.service === k.service));
+              const isEditingTiktok = byokEditing === "tiktok";
+
+              return (
+                <div className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">{ts.byokTiktok}</h3>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${tiktokConfigured.length === 2 ? "bg-green-100 text-green-800" : tiktokConfigured.length > 0 ? "bg-yellow-100 text-yellow-800" : "bg-gray-100 text-gray-500"}`}>
+                        {tiktokConfigured.length === 2 ? ts.byokMasked : tiktokConfigured.length > 0 ? `${tiktokConfigured.length}/2` : ts.byokNotSet}
+                      </span>
+                    </div>
+                    {!isEditingTiktok && (
+                      <button
+                        onClick={() => { setByokEditing("tiktok"); setByokKeyInput(""); }}
+                        className="text-xs text-red-600 hover:text-red-800 transition-colors cursor-pointer"
+                      >
+                        {tiktokConfigured.length > 0 ? ts.edit : ts.byokSave}
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-400 mb-2">{ts.byokTiktokHint}</p>
+
+                  {!isEditingTiktok && tiktokConfigured.length > 0 && (
+                    <div className="space-y-1">
+                      {tiktokKeys.map((tk) => {
+                        const existing = apiKeys.find((a) => a.service === tk.service);
+                        return existing ? (
+                          <div key={tk.service} className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500 w-36">{tk.name}:</span>
+                            <span className="text-sm text-gray-600 font-mono">{existing.masked_key}</span>
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
+                  )}
+
+                  {isEditingTiktok && (
+                    <div className="space-y-2 mt-2">
+                      {tiktokKeys.map((tk) => {
+                        const existing = apiKeys.find((a) => a.service === tk.service);
+                        return (
+                          <div key={tk.service}>
+                            <label className="text-xs text-gray-500 mb-1 block">{tk.name}</label>
+                            <input
+                              type="password"
+                              defaultValue=""
+                              placeholder={existing ? "••••••••  (leave blank to keep)" : ts.byokPlaceholder}
+                              data-tiktok-key={tk.service}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none font-mono"
+                            />
+                          </div>
+                        );
+                      })}
+                      <div className="flex gap-2 mt-3">
+                        <button
+                          onClick={async () => {
+                            setByokSaving(true);
+                            try {
+                              const inputs = document.querySelectorAll<HTMLInputElement>("[data-tiktok-key]");
+                              let saved = false;
+                              for (const input of inputs) {
+                                const service = input.getAttribute("data-tiktok-key");
+                                const value = input.value.trim();
+                                if (value && service) {
+                                  const res = await fetch("/api/api-keys", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ action: "upsert", service, api_key: value }),
+                                  });
+                                  if (res.ok) saved = true;
+                                }
+                              }
+                              if (saved) {
+                                setByokMsg(ts.byokSaved);
+                                setByokEditing(null);
+                                const data = await fetch("/api/api-keys").then((r) => r.json());
+                                setApiKeys(data.keys || []);
+                              }
+                            } finally {
+                              setByokSaving(false);
+                              setTimeout(() => setByokMsg(""), 3000);
+                            }
+                          }}
+                          disabled={byokSaving}
+                          className="text-xs bg-red-800 hover:bg-red-900 text-white px-3 py-1.5 rounded font-medium transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          {byokSaving ? "..." : ts.byokSave}
+                        </button>
+                        <button
+                          onClick={() => setByokEditing(null)}
+                          className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded border border-gray-200 transition-colors cursor-pointer"
+                        >
+                          {tc.cancel}
+                        </button>
+                        {tiktokConfigured.length > 0 && (
+                          <button
+                            onClick={async () => {
+                              for (const tk of tiktokKeys) {
+                                await fetch("/api/api-keys", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ action: "delete", service: tk.service }),
                                 });
                               }
                               setByokMsg(ts.byokDeleted);
