@@ -46,7 +46,7 @@ export default function TikTokPage() {
   const [genVideos, setGenVideos] = useState<GeneratedVideo[]>([]);
   const [genMessage, setGenMessage] = useState("");
   const [xpilotKey, setXpilotKey] = useState<string | null>(null);
-  const [videoModels, setVideoModels] = useState<{ id: string; label: string; tier: string }[]>([]);
+  const [videoModels, setVideoModels] = useState<{ id: string; label: string; tier: string; durations?: number[] }[]>([]);
 
   useEffect(() => {
     fetchStatus();
@@ -332,7 +332,14 @@ export default function TikTokPage() {
                   <label className="block text-sm text-gray-600 mb-1">{t.genModel}</label>
                   <select
                     value={genModel}
-                    onChange={(e) => setGenModel(e.target.value)}
+                    onChange={(e) => {
+                      const newModel = e.target.value;
+                      setGenModel(newModel);
+                      const durations = videoModels.find((m) => m.id === newModel)?.durations || [5, 8];
+                      if (!durations.includes(parseInt(genDuration))) {
+                        setGenDuration(String(durations[0]));
+                      }
+                    }}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
                   >
                     {videoModels.map((m) => (
@@ -349,8 +356,9 @@ export default function TikTokPage() {
                     onChange={(e) => setGenDuration(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   >
-                    <option value="5">5s</option>
-                    <option value="8">8s</option>
+                    {(videoModels.find((m) => m.id === genModel)?.durations || [5, 8]).map((d) => (
+                      <option key={d} value={String(d)}>{d}s</option>
+                    ))}
                   </select>
                 </div>
                 <div className="flex items-end">
