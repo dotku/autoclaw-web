@@ -69,7 +69,7 @@ export default function PartnersPublicPage() {
             <span className="font-bold text-lg">AutoClaw</span>
           </Link>
           <div className="flex items-center gap-4">
-            <LanguageSwitcher />
+            <LanguageSwitcher locale={locale} />
             <Link
               href={`/${locale}`}
               className="text-sm text-gray-400 hover:text-white transition-colors"
