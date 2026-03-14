@@ -130,7 +130,6 @@ export default function TikTokPage() {
         setGenVideos((prev) => [newVideo, ...prev]);
         setGenMessage(t.genSubmitted);
         setGenPrompt("");
-        // Start polling
         pollVideoStatus(data.taskId, data.provider);
       } else {
         setGenMessage(`${t.genFailed}: ${data.error}`);
@@ -147,7 +146,7 @@ export default function TikTokPage() {
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((r) => setTimeout(r, 5000));
       try {
-        const providerParam = provider ? `?provider=${provider}` : "";
+        const providerParam = provider ? `&provider=${provider}` : "";
         const res = await fetch(`/api/tiktok/generate?taskId=${taskId}${providerParam}`);
         const data = await res.json();
         if (data.status === "completed" && data.videoUrl) {
@@ -167,7 +166,6 @@ export default function TikTokPage() {
         // continue polling
       }
     }
-    // Timeout
     setGenVideos((prev) =>
       prev.map((v) => (v.taskId === taskId ? { ...v, status: "failed" } : v))
     );
@@ -194,12 +192,12 @@ export default function TikTokPage() {
     <DashboardShell user={user}>
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold">{t.title}</h1>
-          <p className="text-gray-400 mt-1">{t.subtitle}</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t.title}</h1>
+          <p className="text-gray-500 mt-1">{t.subtitle}</p>
         </div>
 
         {/* Sandbox Notice */}
-        <div className="bg-orange-600 border border-orange-500 rounded-lg p-4 flex items-start gap-3">
+        <div className="bg-orange-500 rounded-lg p-4 flex items-start gap-3">
           <svg className="w-5 h-5 text-white mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
@@ -207,28 +205,28 @@ export default function TikTokPage() {
         </div>
 
         {/* Connection Status */}
-        <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-          <h2 className="text-lg font-semibold mb-4">{t.accountInfo}</h2>
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">{t.accountInfo}</h2>
           {loading ? (
-            <div className="text-gray-400">Loading...</div>
+            <div className="text-gray-500">Loading...</div>
           ) : status?.connected ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <span className="inline-block w-3 h-3 rounded-full bg-green-500" />
-                <span className="text-green-400 font-medium">{t.connected}</span>
+                <span className="text-green-700 font-medium">{t.connected}</span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div>
-                  <span className="text-gray-400">{t.openId}:</span>
-                  <span className="ml-2 text-gray-200 font-mono text-xs">{status.openId}</span>
+                  <span className="text-gray-500">{t.openId}:</span>
+                  <span className="ml-2 text-gray-800 font-mono text-xs">{status.openId}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">{t.scope}:</span>
-                  <span className="ml-2 text-gray-200">{status.scope}</span>
+                  <span className="text-gray-500">{t.scope}:</span>
+                  <span className="ml-2 text-gray-800">{status.scope}</span>
                 </div>
                 <div>
-                  <span className="text-gray-400">{t.expiresAt}:</span>
-                  <span className="ml-2 text-gray-200">
+                  <span className="text-gray-500">{t.expiresAt}:</span>
+                  <span className="ml-2 text-gray-800">
                     {status.expiresAt
                       ? new Date(status.expiresAt).toLocaleString()
                       : "-"}
@@ -240,9 +238,9 @@ export default function TikTokPage() {
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <span className="inline-block w-3 h-3 rounded-full bg-red-500" />
-                <span className="text-red-400 font-medium">{t.notConnected}</span>
+                <span className="text-red-600 font-medium">{t.notConnected}</span>
               </div>
-              <p className="text-gray-400 text-sm">{t.noAccount}</p>
+              <p className="text-gray-500 text-sm">{t.noAccount}</p>
               <button
                 onClick={handleConnect}
                 className="px-4 py-2 bg-[#fe2c55] hover:bg-[#e0274d] text-white rounded-lg font-medium transition-colors"
@@ -254,15 +252,15 @@ export default function TikTokPage() {
         </div>
 
         {/* AI Video Generation */}
-        <div className="bg-white/5 border border-white/10 rounded-lg p-6">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
           <div className="flex items-center gap-2 mb-4">
-            <h2 className="text-lg font-semibold">{t.genTitle}</h2>
-            <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">xPilot AI</span>
+            <h2 className="text-lg font-semibold text-gray-900">{t.genTitle}</h2>
+            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">xPilot AI</span>
           </div>
 
           {!xpilotKey ? (
             <div className="text-center py-6">
-              <p className="text-gray-400 text-sm mb-3">{t.genNeedKey}</p>
+              <p className="text-gray-500 text-sm mb-3">{t.genNeedKey}</p>
               <a
                 href={`/${locale}/dashboard/settings`}
                 className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
@@ -273,22 +271,22 @@ export default function TikTokPage() {
           ) : (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">{t.genPromptLabel}</label>
+                <label className="block text-sm text-gray-600 mb-1">{t.genPromptLabel}</label>
                 <textarea
                   value={genPrompt}
                   onChange={(e) => setGenPrompt(e.target.value)}
                   placeholder={t.genPromptPlaceholder}
                   rows={3}
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none"
                 />
               </div>
               <div className="flex items-center gap-4">
                 <div>
-                  <label className="block text-sm text-gray-400 mb-1">{t.genDuration}</label>
+                  <label className="block text-sm text-gray-600 mb-1">{t.genDuration}</label>
                   <select
                     value={genDuration}
                     onChange={(e) => setGenDuration(e.target.value)}
-                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500"
+                    className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   >
                     <option value="4">4s</option>
                     <option value="8">8s</option>
@@ -305,7 +303,7 @@ export default function TikTokPage() {
                 </button>
               </div>
               {genMessage && (
-                <div className={`text-sm p-3 rounded-lg ${genMessage.includes(t.genFailed) ? "bg-red-500/10 text-red-400" : "bg-purple-500/10 text-purple-300"}`}>
+                <div className={`text-sm p-3 rounded-lg ${genMessage.includes(t.genFailed) ? "bg-red-50 text-red-600 border border-red-200" : "bg-purple-50 text-purple-700 border border-purple-200"}`}>
                   {genMessage}
                 </div>
               )}
@@ -313,20 +311,20 @@ export default function TikTokPage() {
               {/* Generated Videos */}
               {genVideos.length > 0 && (
                 <div className="space-y-3 mt-4">
-                  <h3 className="text-sm font-medium text-gray-300">{t.genResults}</h3>
+                  <h3 className="text-sm font-medium text-gray-700">{t.genResults}</h3>
                   {genVideos.map((video) => (
-                    <div key={video.taskId} className="border border-white/10 rounded-lg p-4 space-y-2">
-                      <p className="text-sm text-gray-300 line-clamp-2">{video.prompt}</p>
+                    <div key={video.taskId} className="border border-gray-200 rounded-lg p-4 space-y-2">
+                      <p className="text-sm text-gray-700 line-clamp-2">{video.prompt}</p>
                       <div className="flex items-center gap-3">
                         {video.status === "processing" && (
-                          <span className="flex items-center gap-2 text-xs text-yellow-400">
-                            <span className="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                          <span className="flex items-center gap-2 text-xs text-amber-600">
+                            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                             {t.genProcessing}
                           </span>
                         )}
                         {video.status === "completed" && (
                           <>
-                            <span className="flex items-center gap-2 text-xs text-green-400">
+                            <span className="flex items-center gap-2 text-xs text-green-600">
                               <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
                               {t.genCompleted}
                             </span>
@@ -334,7 +332,7 @@ export default function TikTokPage() {
                               href={video.videoUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-xs text-purple-400 hover:text-purple-300 underline"
+                              className="text-xs text-purple-600 hover:text-purple-800 underline"
                             >
                               {t.genPreview}
                             </a>
@@ -349,7 +347,7 @@ export default function TikTokPage() {
                           </>
                         )}
                         {video.status === "failed" && (
-                          <span className="flex items-center gap-2 text-xs text-red-400">
+                          <span className="flex items-center gap-2 text-xs text-red-600">
                             <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
                             {t.genFailed}
                           </span>
@@ -365,35 +363,35 @@ export default function TikTokPage() {
 
         {/* Post Video Form */}
         {status?.connected && (
-          <div className="bg-white/5 border border-white/10 rounded-lg p-6">
-            <h2 className="text-lg font-semibold mb-4">{t.postVideo}</h2>
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">{t.postVideo}</h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-gray-400 mb-1">{t.videoTitle}</label>
+                <label className="block text-sm text-gray-600 mb-1">{t.videoTitle}</label>
                 <input
                   type="text"
                   value={videoTitle}
                   onChange={(e) => setVideoTitle(e.target.value)}
                   placeholder="xPilot - AI Social Media Copilot #xPilot #AIMarketing"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-[#fe2c55]"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">{t.videoUrl}</label>
+                <label className="block text-sm text-gray-600 mb-1">{t.videoUrl}</label>
                 <input
                   type="url"
                   value={videoUrl}
                   onChange={(e) => setVideoUrl(e.target.value)}
                   placeholder="https://example.com/video.mp4"
-                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-[#fe2c55]"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 />
               </div>
               <div>
-                <label className="block text-sm text-gray-400 mb-1">{t.privacy}</label>
+                <label className="block text-sm text-gray-600 mb-1">{t.privacy}</label>
                 <select
                   value={privacy}
                   onChange={(e) => setPrivacy(e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-[#fe2c55]"
+                  className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500"
                 >
                   <option value="PUBLIC_TO_EVERYONE">{t.privacyPublic}</option>
                   <option value="SELF_ONLY">{t.privacySelf}</option>
@@ -404,8 +402,8 @@ export default function TikTokPage() {
                 <div
                   className={`text-sm p-3 rounded-lg ${
                     message.includes(t.posted)
-                      ? "bg-green-500/10 text-green-400"
-                      : "bg-red-500/10 text-red-400"
+                      ? "bg-green-50 text-green-700 border border-green-200"
+                      : "bg-red-50 text-red-600 border border-red-200"
                   }`}
                 >
                   {message}
