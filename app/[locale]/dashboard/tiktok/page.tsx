@@ -132,7 +132,8 @@ export default function TikTokPage() {
         setGenPrompt("");
         pollVideoStatus(data.taskId, data.provider);
       } else {
-        setGenMessage(`${t.genFailed}: ${data.error}`);
+        const errStr = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
+        setGenMessage(`${t.genFailed}: ${errStr}`);
       }
     } catch {
       setGenMessage(t.genFailed);

@@ -69,16 +69,18 @@ export async function POST(req: NextRequest) {
     });
 
     const data = await res.json();
+    console.log("xPilot video generate response:", res.status, JSON.stringify(data));
 
     if (!res.ok) {
+      const errMsg = typeof data.error === "string" ? data.error : JSON.stringify(data.error || data);
       return NextResponse.json(
-        { error: data.error || "xPilot API error", details: data },
+        { error: errMsg },
         { status: 502 }
       );
     }
 
     return NextResponse.json({
-      taskId: data.taskId || data.task_id,
+      taskId: data.taskId || data.task_id || data.id,
       provider: data.provider,
       message: "Video generation started",
     });
