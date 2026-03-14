@@ -93,7 +93,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { title, videoUrl, privacyLevel = "PUBLIC_TO_EVERYONE" } = body;
+  const { title, videoUrl, privacyLevel = "SELF_ONLY" } = body;
 
   if (!title || !videoUrl) {
     return NextResponse.json(
