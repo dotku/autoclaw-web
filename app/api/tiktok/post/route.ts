@@ -144,7 +144,7 @@ export async function POST(req: NextRequest) {
     const initData = await initRes.json();
     console.log("TikTok post response:", initRes.status, JSON.stringify(initData));
 
-    if (initData.error?.code) {
+    if (initData.error?.code && initData.error.code !== "ok") {
       return NextResponse.json(
         { error: "TikTok API error", details: initData.error },
         { status: 502 }
