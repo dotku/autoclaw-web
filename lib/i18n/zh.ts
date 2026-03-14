@@ -761,6 +761,7 @@ const zh: typeof en = {
     genConfigKey: "配置 xPilot 密钥",
     genPromptLabel: "视频描述",
     genPromptPlaceholder: "描述您想要创建的视频，例如：'一个未来感的工作空间，全息屏幕展示社交媒体仪表盘'",
+    genModel: "模型",
     genDuration: "时长",
     genGenerate: "生成视频",
     genGenerating: "生成中...",

@@ -39,14 +39,17 @@ export default function TikTokPage() {
   // Video generation state
   const [genPrompt, setGenPrompt] = useState("");
   const [genDuration, setGenDuration] = useState("4");
+  const [genModel, setGenModel] = useState("wavespeed-ai/wan-2.2/t2v-480p-ultra-fast");
   const [generating, setGenerating] = useState(false);
   const [genVideos, setGenVideos] = useState<GeneratedVideo[]>([]);
   const [genMessage, setGenMessage] = useState("");
   const [xpilotKey, setXpilotKey] = useState<string | null>(null);
+  const [videoModels, setVideoModels] = useState<{ id: string; label: string; tier: string }[]>([]);
 
   useEffect(() => {
     fetchStatus();
     fetchXpilotKey();
+    fetchModels();
   }, []);
 
   async function fetchStatus() {
@@ -75,6 +78,16 @@ export default function TikTokPage() {
       setXpilotKey(key ? "configured" : null);
     } catch {
       setXpilotKey(null);
+    }
+  }
+
+  async function fetchModels() {
+    try {
+      const res = await fetch("/api/tiktok/generate?listModels=true");
+      const data = await res.json();
+      if (data.models) setVideoModels(data.models);
+    } catch {
+      // ignore
     }
   }
 
@@ -118,6 +131,7 @@ export default function TikTokPage() {
         body: JSON.stringify({
           prompt: genPrompt,
           duration: parseInt(genDuration),
+          model: genModel,
         }),
       });
       const data = await res.json();
@@ -281,27 +295,42 @@ export default function TikTokPage() {
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 resize-none"
                 />
               </div>
-              <div className="flex items-center gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-600 mb-1">{t.genModel}</label>
+                  <select
+                    value={genModel}
+                    onChange={(e) => setGenModel(e.target.value)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500 text-sm"
+                  >
+                    {videoModels.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label} ({m.tier})
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm text-gray-600 mb-1">{t.genDuration}</label>
                   <select
                     value={genDuration}
                     onChange={(e) => setGenDuration(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   >
                     <option value="4">4s</option>
                     <option value="8">8s</option>
                     <option value="12">12s</option>
                   </select>
                 </div>
-                <div className="flex-1" />
+                <div className="flex items-end">
                 <button
                   onClick={handleGenerate}
                   disabled={generating || !genPrompt}
-                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-auto"
+                  className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {generating ? t.genGenerating : t.genGenerate}
                 </button>
+                </div>
               </div>
               {genMessage && (
                 <div className={`text-sm p-3 rounded-lg ${genMessage.includes(t.genFailed) ? "bg-red-50 text-red-600 border border-red-200" : "bg-purple-50 text-purple-700 border border-purple-200"}`}>

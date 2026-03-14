@@ -3,6 +3,7 @@ import { auth0 } from "@/lib/auth0";
 import { getDb } from "@/lib/db";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { decrypt } from "@/lib/crypto";
+import { put } from "@vercel/blob";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,15 @@ async function getXpilotKey(userId: number): Promise<string | null> {
   if (keys.length === 0) return null;
   return decrypt(keys[0].api_key);
 }
+
+const TEXT_TO_VIDEO_MODELS = [
+  { id: "wavespeed-ai/wan-2.2/t2v-480p-ultra-fast", label: "Wan 2.2 — 480p Ultra Fast", tier: "fast" },
+  { id: "wavespeed-ai/wan-2.2/t2v-720p", label: "Wan 2.2 — 720p", tier: "standard" },
+  { id: "alibaba/wan-2.6/text-to-video", label: "Wan 2.6 Audio", tier: "standard" },
+  { id: "bytedance/seedance-v1.5-pro/text-to-video", label: "Seedance 1.5 Pro Audio", tier: "premium" },
+  { id: "kwaivgi/kling-video-o3-std/text-to-video", label: "Kling Video O3", tier: "premium" },
+  { id: "seedance-2.0/text-to-video", label: "Seedance 2.0 Audio", tier: "premium" },
+];
 
 // POST: Generate video via xPilot API
 export async function POST(req: NextRequest) {
@@ -48,10 +58,16 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { prompt, duration = 4 } = body;
+  const { prompt, duration = 4, model = "wavespeed-ai/wan-2.2/t2v-480p-ultra-fast" } = body;
 
   if (!prompt) {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
+  }
+
+  // Validate model
+  const validModel = TEXT_TO_VIDEO_MODELS.find((m) => m.id === model);
+  if (!validModel) {
+    return NextResponse.json({ error: "Invalid model" }, { status: 400 });
   }
 
   try {
@@ -62,6 +78,7 @@ export async function POST(req: NextRequest) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        model,
         prompt,
         duration,
         aspect_ratio: "9:16",
@@ -72,11 +89,8 @@ export async function POST(req: NextRequest) {
     console.log("xPilot video generate response:", res.status, JSON.stringify(data));
 
     if (!res.ok) {
-      const errMsg = typeof data.error === "string" ? data.error : JSON.stringify(data.error || data);
-      return NextResponse.json(
-        { error: errMsg },
-        { status: 502 }
-      );
+      const errMsg = typeof data.error === "string" ? data.error : (data.error?.message || JSON.stringify(data.error || data));
+      return NextResponse.json({ error: errMsg }, { status: 502 });
     }
 
     return NextResponse.json({
@@ -90,8 +104,13 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET: Poll video generation status
+// GET: Poll video status or list models
 export async function GET(req: NextRequest) {
+  const listModels = req.nextUrl.searchParams.get("listModels");
+  if (listModels === "true") {
+    return NextResponse.json({ models: TEXT_TO_VIDEO_MODELS });
+  }
+
   const session = await auth0.getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -120,16 +139,40 @@ export async function GET(req: NextRequest) {
     const providerParam = provider ? `?provider=${provider}` : "";
     const res = await fetch(
       `https://xpilot.jytech.us/api/v1/video/${taskId}${providerParam}`,
-      {
-        headers: { Authorization: `Bearer ${xpilotKey}` },
-      }
+      { headers: { Authorization: `Bearer ${xpilotKey}` } }
     );
 
     const data = await res.json();
+    console.log("xPilot video status:", res.status, JSON.stringify(data));
+
+    const videoUrl = data.output?.video_url || data.videoUrl || data.video_url || data.output?.url;
+
+    // If completed and has video URL, save to Vercel Blob
+    if (data.status === "completed" && videoUrl) {
+      try {
+        const videoRes = await fetch(videoUrl);
+        if (videoRes.ok) {
+          const videoBlob = await videoRes.blob();
+          const filename = `tiktok-videos/${taskId}.mp4`;
+          const blob = await put(filename, videoBlob, {
+            access: "public",
+            contentType: "video/mp4",
+          });
+          return NextResponse.json({
+            status: "completed",
+            videoUrl: blob.url,
+            originalUrl: videoUrl,
+          });
+        }
+      } catch (blobErr) {
+        console.warn("Failed to save to Vercel Blob, using original URL:", blobErr);
+      }
+      return NextResponse.json({ status: "completed", videoUrl });
+    }
 
     return NextResponse.json({
       status: data.status,
-      videoUrl: data.output?.video_url || data.videoUrl || data.video_url,
+      videoUrl,
       progress: data.progress,
     });
   } catch (err) {

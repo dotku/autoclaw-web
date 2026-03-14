@@ -760,6 +760,7 @@ const fr: typeof en = {
     genConfigKey: "Configurer la clé xPilot",
     genPromptLabel: "Description de la vidéo",
     genPromptPlaceholder: "Décrivez la vidéo que vous souhaitez créer, par ex. 'Un espace de travail futuriste avec des écrans holographiques'",
+    genModel: "Modèle",
     genDuration: "Durée",
     genGenerate: "Générer la vidéo",
     genGenerating: "Génération...",

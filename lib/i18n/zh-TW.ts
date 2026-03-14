@@ -760,6 +760,7 @@ const zhTW: typeof en = {
     genConfigKey: "配置 xPilot 金鑰",
     genPromptLabel: "影片描述",
     genPromptPlaceholder: "描述您想要建立的影片，例如：'一個未來感的工作空間，全息螢幕展示社群媒體儀表板'",
+    genModel: "模型",
     genDuration: "時長",
     genGenerate: "生成影片",
     genGenerating: "生成中...",

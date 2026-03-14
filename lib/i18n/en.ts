@@ -778,6 +778,7 @@ const en = {
     genConfigKey: "Configure xPilot Key",
     genPromptLabel: "Video Prompt",
     genPromptPlaceholder: "Describe the video you want to create, e.g. 'A sleek futuristic workspace with holographic screens showing social media dashboards'",
+    genModel: "Model",
     genDuration: "Duration",
     genGenerate: "Generate Video",
     genGenerating: "Generating...",
