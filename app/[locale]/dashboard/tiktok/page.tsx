@@ -99,10 +99,10 @@ export default function TikTokPage() {
       const res = await fetch("/api/tiktok/generate?listVideos=true");
       const data = await res.json();
       if (data.videos) {
-        const history: GeneratedVideo[] = data.videos.map((v: { task_id: string; status: string; video_url?: string; blob_url?: string; prompt: string; model?: string; created_at?: string }) => ({
+        const history: GeneratedVideo[] = data.videos.map((v: { task_id: string; status: string; video_url?: string; blob_url?: string; proxy_url?: string; prompt: string; model?: string; created_at?: string }) => ({
           taskId: v.task_id,
           status: v.status as GeneratedVideo["status"],
-          videoUrl: v.blob_url || v.video_url,
+          videoUrl: v.proxy_url || v.blob_url || v.video_url,
           prompt: v.prompt,
           model: v.model,
           createdAt: v.created_at,

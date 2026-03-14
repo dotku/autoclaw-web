@@ -169,7 +169,13 @@ export async function GET(req: NextRequest) {
       FROM generated_videos WHERE user_id = ${users[0].id}
       ORDER BY created_at DESC LIMIT 50
     `;
-    return NextResponse.json({ videos });
+    // Add proxy URLs for completed videos
+    const origin = req.nextUrl.origin;
+    const videosWithProxy = videos.map((v: Record<string, unknown>) => ({
+      ...v,
+      proxy_url: v.status === "completed" ? `${origin}/api/videos/${v.task_id}` : null,
+    }));
+    return NextResponse.json({ videos: videosWithProxy });
   }
 
   const taskId = req.nextUrl.searchParams.get("taskId");
@@ -249,7 +255,9 @@ export async function GET(req: NextRequest) {
         console.warn("Failed to update video record:", dbErr);
       }
 
-      return NextResponse.json({ status: "completed", videoUrl: finalUrl, originalUrl: videoUrl });
+      // Return proxy URL through our domain for TikTok compatibility
+      const proxyUrl = `${req.nextUrl.origin}/api/videos/${taskId}`;
+      return NextResponse.json({ status: "completed", videoUrl: proxyUrl, originalUrl: videoUrl });
     }
 
     // Update failed status in DB
