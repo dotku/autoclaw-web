@@ -13,10 +13,10 @@ function getIp(req: NextRequest): string {
 async function getXpilotKey(userId: number): Promise<string | null> {
   const sql = getDb();
   const keys = await sql`
-    SELECT encrypted_key FROM api_keys WHERE user_id = ${userId} AND service = 'xpilot' AND revoked_at IS NULL LIMIT 1
+    SELECT api_key FROM user_api_keys WHERE user_id = ${userId} AND service = 'xpilot' LIMIT 1
   `;
   if (keys.length === 0) return null;
-  return decrypt(keys[0].encrypted_key);
+  return decrypt(keys[0].api_key);
 }
 
 // POST: Generate video via xPilot API
