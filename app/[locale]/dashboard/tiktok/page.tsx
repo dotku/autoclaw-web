@@ -144,7 +144,7 @@ export default function TikTokPage() {
         setGenVideos((prev) => [newVideo, ...prev]);
         setGenMessage(t.genSubmitted);
         setGenPrompt("");
-        pollVideoStatus(data.taskId, data.provider);
+        pollVideoStatus(data.taskId, data.provider, data.pollUrl);
       } else {
         const errStr = typeof data.error === "string" ? data.error : JSON.stringify(data.error);
         setGenMessage(`${t.genFailed}: ${errStr}`);
@@ -156,13 +156,15 @@ export default function TikTokPage() {
     }
   }
 
-  async function pollVideoStatus(taskId: string, provider?: string) {
+  async function pollVideoStatus(taskId: string, provider?: string, pollUrl?: string) {
     const maxAttempts = 60;
     for (let i = 0; i < maxAttempts; i++) {
       await new Promise((r) => setTimeout(r, 5000));
       try {
-        const providerParam = provider ? `&provider=${provider}` : "";
-        const res = await fetch(`/api/tiktok/generate?taskId=${taskId}${providerParam}`);
+        const params = new URLSearchParams({ taskId });
+        if (provider) params.set("provider", provider);
+        if (pollUrl) params.set("pollUrl", pollUrl);
+        const res = await fetch(`/api/tiktok/generate?${params.toString()}`);
         const data = await res.json();
         if (data.status === "completed" && data.videoUrl) {
           setGenVideos((prev) =>

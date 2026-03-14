@@ -99,6 +99,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       taskId: data.taskId || data.task_id || data.id,
       provider: data.provider,
+      pollUrl: data.poll_url || data.pollUrl,
       message: "Video generation started",
     });
   } catch (err) {
@@ -140,16 +141,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const providerParam = provider ? `?provider=${provider}` : "";
+    const pollUrl = req.nextUrl.searchParams.get("pollUrl");
+    const params = new URLSearchParams();
+    if (provider) params.set("provider", provider);
+    if (pollUrl) params.set("pollUrl", pollUrl);
+    const qs = params.toString() ? `?${params.toString()}` : "";
     const res = await fetch(
-      `https://xpilot.jytech.us/api/v1/video/${taskId}${providerParam}`,
+      `https://xpilot.jytech.us/api/v1/video/${taskId}${qs}`,
       { headers: { Authorization: `Bearer ${xpilotKey}` } }
     );
 
     const data = await res.json();
     console.log("xPilot video status:", res.status, JSON.stringify(data));
 
-    const videoUrl = data.output?.video_url || data.videoUrl || data.video_url || data.output?.url;
+    const videoUrl = data.outputs?.[0] || data.output?.video_url || data.videoUrl || data.video_url || data.output?.url;
 
     // If completed and has video URL, save to Vercel Blob
     if (data.status === "completed" && videoUrl) {
