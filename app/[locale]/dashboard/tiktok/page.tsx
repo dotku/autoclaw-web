@@ -14,6 +14,13 @@ interface TikTokStatus {
   authUrl?: string;
 }
 
+interface GeneratedVideo {
+  taskId: string;
+  status: "processing" | "completed" | "failed";
+  videoUrl?: string;
+  prompt: string;
+}
+
 export default function TikTokPage() {
   const { user } = useUser();
   const params = useParams();
@@ -29,8 +36,17 @@ export default function TikTokPage() {
   const [videoUrl, setVideoUrl] = useState("");
   const [privacy, setPrivacy] = useState("SELF_ONLY");
 
+  // Video generation state
+  const [genPrompt, setGenPrompt] = useState("");
+  const [genDuration, setGenDuration] = useState("4");
+  const [generating, setGenerating] = useState(false);
+  const [genVideos, setGenVideos] = useState<GeneratedVideo[]>([]);
+  const [genMessage, setGenMessage] = useState("");
+  const [xpilotKey, setXpilotKey] = useState<string | null>(null);
+
   useEffect(() => {
     fetchStatus();
+    fetchXpilotKey();
   }, []);
 
   async function fetchStatus() {
@@ -48,6 +64,17 @@ export default function TikTokPage() {
       setStatus({ connected: false });
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function fetchXpilotKey() {
+    try {
+      const res = await fetch("/api/api-keys");
+      const data = await res.json();
+      const key = data.keys?.find((k: { service: string }) => k.service === "xpilot");
+      setXpilotKey(key ? "configured" : null);
+    } catch {
+      setXpilotKey(null);
     }
   }
 
@@ -80,12 +107,85 @@ export default function TikTokPage() {
     }
   }
 
+  async function handleGenerate() {
+    if (!genPrompt) return;
+    setGenerating(true);
+    setGenMessage("");
+    try {
+      const res = await fetch("/api/tiktok/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: genPrompt,
+          duration: parseInt(genDuration),
+        }),
+      });
+      const data = await res.json();
+      if (data.taskId) {
+        const newVideo: GeneratedVideo = {
+          taskId: data.taskId,
+          status: "processing",
+          prompt: genPrompt,
+        };
+        setGenVideos((prev) => [newVideo, ...prev]);
+        setGenMessage(t.genSubmitted);
+        setGenPrompt("");
+        // Start polling
+        pollVideoStatus(data.taskId, data.provider);
+      } else {
+        setGenMessage(`${t.genFailed}: ${data.error}`);
+      }
+    } catch {
+      setGenMessage(t.genFailed);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function pollVideoStatus(taskId: string, provider?: string) {
+    const maxAttempts = 60;
+    for (let i = 0; i < maxAttempts; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      try {
+        const providerParam = provider ? `?provider=${provider}` : "";
+        const res = await fetch(`/api/tiktok/generate?taskId=${taskId}${providerParam}`);
+        const data = await res.json();
+        if (data.status === "completed" && data.videoUrl) {
+          setGenVideos((prev) =>
+            prev.map((v) =>
+              v.taskId === taskId ? { ...v, status: "completed", videoUrl: data.videoUrl } : v
+            )
+          );
+          return;
+        } else if (data.status === "failed") {
+          setGenVideos((prev) =>
+            prev.map((v) => (v.taskId === taskId ? { ...v, status: "failed" } : v))
+          );
+          return;
+        }
+      } catch {
+        // continue polling
+      }
+    }
+    // Timeout
+    setGenVideos((prev) =>
+      prev.map((v) => (v.taskId === taskId ? { ...v, status: "failed" } : v))
+    );
+  }
+
   function handleConnect() {
     const clientKey = "sbawg8ocnk6tzdia9g";
     const redirectUri = `${window.location.origin}/api/tiktok/callback`;
     const scope = "user.info.basic,video.publish,video.upload";
     const authUrl = `https://www.tiktok.com/v2/auth/authorize/?client_key=${clientKey}&scope=${scope}&response_type=code&redirect_uri=${encodeURIComponent(redirectUri)}&state=xpilot`;
     window.location.href = status?.authUrl || authUrl;
+  }
+
+  function useGeneratedVideo(video: GeneratedVideo) {
+    if (video.videoUrl) {
+      setVideoUrl(video.videoUrl);
+      setVideoTitle(video.prompt.slice(0, 150) + " #xPilot #AIMarketing");
+    }
   }
 
   if (!user) return null;
@@ -99,8 +199,11 @@ export default function TikTokPage() {
         </div>
 
         {/* Sandbox Notice */}
-        <div className="bg-yellow-600/20 border border-yellow-500 rounded-lg p-4 text-yellow-100 text-sm font-medium">
-          {t.sandboxNotice}
+        <div className="bg-orange-500/15 border border-orange-500 rounded-lg p-4 flex items-start gap-3">
+          <svg className="w-5 h-5 text-orange-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <span className="text-orange-300 text-sm font-medium">{t.sandboxNotice}</span>
         </div>
 
         {/* Connection Status */}
@@ -146,6 +249,116 @@ export default function TikTokPage() {
               >
                 {t.authorize}
               </button>
+            </div>
+          )}
+        </div>
+
+        {/* AI Video Generation */}
+        <div className="bg-white/5 border border-white/10 rounded-lg p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <h2 className="text-lg font-semibold">{t.genTitle}</h2>
+            <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full">xPilot AI</span>
+          </div>
+
+          {!xpilotKey ? (
+            <div className="text-center py-6">
+              <p className="text-gray-400 text-sm mb-3">{t.genNeedKey}</p>
+              <a
+                href={`/${locale}/dashboard/settings`}
+                className="inline-block px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                {t.genConfigKey}
+              </a>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">{t.genPromptLabel}</label>
+                <textarea
+                  value={genPrompt}
+                  onChange={(e) => setGenPrompt(e.target.value)}
+                  placeholder={t.genPromptPlaceholder}
+                  rows={3}
+                  className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 resize-none"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">{t.genDuration}</label>
+                  <select
+                    value={genDuration}
+                    onChange={(e) => setGenDuration(e.target.value)}
+                    className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="4">4s</option>
+                    <option value="8">8s</option>
+                    <option value="12">12s</option>
+                  </select>
+                </div>
+                <div className="flex-1" />
+                <button
+                  onClick={handleGenerate}
+                  disabled={generating || !genPrompt}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-auto"
+                >
+                  {generating ? t.genGenerating : t.genGenerate}
+                </button>
+              </div>
+              {genMessage && (
+                <div className={`text-sm p-3 rounded-lg ${genMessage.includes(t.genFailed) ? "bg-red-500/10 text-red-400" : "bg-purple-500/10 text-purple-300"}`}>
+                  {genMessage}
+                </div>
+              )}
+
+              {/* Generated Videos */}
+              {genVideos.length > 0 && (
+                <div className="space-y-3 mt-4">
+                  <h3 className="text-sm font-medium text-gray-300">{t.genResults}</h3>
+                  {genVideos.map((video) => (
+                    <div key={video.taskId} className="border border-white/10 rounded-lg p-4 space-y-2">
+                      <p className="text-sm text-gray-300 line-clamp-2">{video.prompt}</p>
+                      <div className="flex items-center gap-3">
+                        {video.status === "processing" && (
+                          <span className="flex items-center gap-2 text-xs text-yellow-400">
+                            <span className="inline-block w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                            {t.genProcessing}
+                          </span>
+                        )}
+                        {video.status === "completed" && (
+                          <>
+                            <span className="flex items-center gap-2 text-xs text-green-400">
+                              <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                              {t.genCompleted}
+                            </span>
+                            <a
+                              href={video.videoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-purple-400 hover:text-purple-300 underline"
+                            >
+                              {t.genPreview}
+                            </a>
+                            {status?.connected && (
+                              <button
+                                onClick={() => useGeneratedVideo(video)}
+                                className="text-xs bg-[#fe2c55] hover:bg-[#e0274d] text-white px-3 py-1 rounded-lg transition-colors"
+                              >
+                                {t.genUseForPost}
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {video.status === "failed" && (
+                          <span className="flex items-center gap-2 text-xs text-red-400">
+                            <span className="inline-block w-2 h-2 rounded-full bg-red-500" />
+                            {t.genFailed}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
