@@ -7,6 +7,28 @@ import { put } from "@vercel/blob";
 
 export const dynamic = "force-dynamic";
 
+async function ensureGeneratedVideosTable() {
+  const sql = getDb();
+  await sql`
+    CREATE TABLE IF NOT EXISTS generated_videos (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+      task_id VARCHAR(255) NOT NULL,
+      provider VARCHAR(100),
+      model VARCHAR(255),
+      prompt TEXT NOT NULL,
+      duration INTEGER DEFAULT 5,
+      status VARCHAR(50) DEFAULT 'processing',
+      video_url TEXT,
+      blob_url TEXT,
+      original_url TEXT,
+      poll_url TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )
+  `;
+}
+
 function getIp(req: NextRequest): string {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
 }
@@ -96,10 +118,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: errMsg }, { status: 502 });
     }
 
+    const resultTaskId = data.taskId || data.task_id || data.id;
+    const resultPollUrl = data.poll_url || data.pollUrl;
+
+    // Save record to DB
+    try {
+      await ensureGeneratedVideosTable();
+      await sql`
+        INSERT INTO generated_videos (user_id, task_id, provider, model, prompt, duration, status, poll_url)
+        VALUES (${userId}, ${resultTaskId}, ${data.provider || null}, ${model}, ${prompt}, ${duration}, 'processing', ${resultPollUrl || null})
+      `;
+    } catch (dbErr) {
+      console.warn("Failed to save video record:", dbErr);
+    }
+
     return NextResponse.json({
-      taskId: data.taskId || data.task_id || data.id,
+      taskId: resultTaskId,
       provider: data.provider,
-      pollUrl: data.poll_url || data.pollUrl,
+      pollUrl: resultPollUrl,
       message: "Video generation started",
     });
   } catch (err) {
@@ -118,6 +154,22 @@ export async function GET(req: NextRequest) {
   const session = await auth0.getSession();
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // List user's video history
+  const listVideos = req.nextUrl.searchParams.get("listVideos");
+  if (listVideos === "true") {
+    const sql = getDb();
+    const sub = session.user.sub;
+    const users = await sql`SELECT id FROM users WHERE auth0_id = ${sub} LIMIT 1`;
+    if (users.length === 0) return NextResponse.json({ videos: [] });
+    await ensureGeneratedVideosTable();
+    const videos = await sql`
+      SELECT task_id, model, prompt, duration, status, video_url, blob_url, original_url, created_at
+      FROM generated_videos WHERE user_id = ${users[0].id}
+      ORDER BY created_at DESC LIMIT 50
+    `;
+    return NextResponse.json({ videos });
   }
 
   const taskId = req.nextUrl.searchParams.get("taskId");
@@ -156,8 +208,11 @@ export async function GET(req: NextRequest) {
 
     const videoUrl = data.outputs?.[0] || data.output?.video_url || data.videoUrl || data.video_url || data.output?.url;
 
-    // If completed and has video URL, save to Vercel Blob
+    // If completed and has video URL, save to Vercel Blob and update DB
     if (data.status === "completed" && videoUrl) {
+      let finalUrl = videoUrl;
+      let blobUrl: string | null = null;
+
       const blobToken = await getUserKey(userId, "blob_token");
       if (blobToken) {
         try {
@@ -170,17 +225,38 @@ export async function GET(req: NextRequest) {
               contentType: "video/mp4",
               token: blobToken,
             });
-            return NextResponse.json({
-              status: "completed",
-              videoUrl: blob.url,
-              originalUrl: videoUrl,
-            });
+            finalUrl = blob.url;
+            blobUrl = blob.url;
           }
         } catch (blobErr) {
           console.warn("Failed to save to Vercel Blob, using original URL:", blobErr);
         }
       }
-      return NextResponse.json({ status: "completed", videoUrl });
+
+      // Update DB record
+      try {
+        await sql`
+          UPDATE generated_videos
+          SET status = 'completed', video_url = ${finalUrl}, blob_url = ${blobUrl}, original_url = ${videoUrl}, updated_at = NOW()
+          WHERE task_id = ${taskId} AND user_id = ${userId}
+        `;
+      } catch (dbErr) {
+        console.warn("Failed to update video record:", dbErr);
+      }
+
+      return NextResponse.json({ status: "completed", videoUrl: finalUrl, originalUrl: videoUrl });
+    }
+
+    // Update failed status in DB
+    if (data.status === "failed") {
+      try {
+        await sql`
+          UPDATE generated_videos SET status = 'failed', updated_at = NOW()
+          WHERE task_id = ${taskId} AND user_id = ${userId}
+        `;
+      } catch (dbErr) {
+        console.warn("Failed to update video record:", dbErr);
+      }
     }
 
     return NextResponse.json({

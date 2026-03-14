@@ -19,6 +19,8 @@ interface GeneratedVideo {
   status: "processing" | "completed" | "failed";
   videoUrl?: string;
   prompt: string;
+  model?: string;
+  createdAt?: string;
 }
 
 export default function TikTokPage() {
@@ -50,6 +52,7 @@ export default function TikTokPage() {
     fetchStatus();
     fetchXpilotKey();
     fetchModels();
+    fetchVideoHistory();
   }, []);
 
   async function fetchStatus() {
@@ -86,6 +89,31 @@ export default function TikTokPage() {
       const res = await fetch("/api/tiktok/generate?listModels=true");
       const data = await res.json();
       if (data.models) setVideoModels(data.models);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function fetchVideoHistory() {
+    try {
+      const res = await fetch("/api/tiktok/generate?listVideos=true");
+      const data = await res.json();
+      if (data.videos) {
+        const history: GeneratedVideo[] = data.videos.map((v: { task_id: string; status: string; video_url?: string; blob_url?: string; prompt: string; model?: string; created_at?: string }) => ({
+          taskId: v.task_id,
+          status: v.status as GeneratedVideo["status"],
+          videoUrl: v.blob_url || v.video_url,
+          prompt: v.prompt,
+          model: v.model,
+          createdAt: v.created_at,
+        }));
+        setGenVideos((prev) => {
+          // Merge: keep in-progress items from current session, append history
+          const currentTaskIds = new Set(prev.map((p) => p.taskId));
+          const newHistory = history.filter((h: GeneratedVideo) => !currentTaskIds.has(h.taskId));
+          return [...prev, ...newHistory];
+        });
+      }
     } catch {
       // ignore
     }
@@ -140,6 +168,8 @@ export default function TikTokPage() {
           taskId: data.taskId,
           status: "processing",
           prompt: genPrompt,
+          model: genModel,
+          createdAt: new Date().toISOString(),
         };
         setGenVideos((prev) => [newVideo, ...prev]);
         setGenMessage(t.genSubmitted);
@@ -346,6 +376,10 @@ export default function TikTokPage() {
                   {genVideos.map((video) => (
                     <div key={video.taskId} className="border border-gray-200 rounded-lg p-4 space-y-2">
                       <p className="text-sm text-gray-700 line-clamp-2">{video.prompt}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        {video.model && <span>{video.model.split("/").pop()}</span>}
+                        {video.createdAt && <span>· {new Date(video.createdAt).toLocaleString()}</span>}
+                      </div>
                       <div className="flex items-center gap-3">
                         {video.status === "processing" && (
                           <span className="flex items-center gap-2 text-xs text-amber-600">
