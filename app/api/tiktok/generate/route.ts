@@ -194,14 +194,19 @@ export async function GET(req: NextRequest) {
 
   try {
     const pollUrl = req.nextUrl.searchParams.get("pollUrl");
-    const params = new URLSearchParams();
-    if (provider) params.set("provider", provider);
-    if (pollUrl) params.set("pollUrl", pollUrl);
-    const qs = params.toString() ? `?${params.toString()}` : "";
-    const res = await fetch(
-      `https://xpilot.jytech.us/api/v1/video/${taskId}${qs}`,
-      { headers: { Authorization: `Bearer ${xpilotKey}` } }
-    );
+    // pollUrl from xPilot is already the full relative path with all query params
+    let fetchUrl: string;
+    if (pollUrl) {
+      fetchUrl = `https://xpilot.jytech.us${pollUrl}`;
+    } else {
+      const params = new URLSearchParams();
+      if (provider) params.set("provider", provider);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      fetchUrl = `https://xpilot.jytech.us/api/v1/video/${taskId}${qs}`;
+    }
+    const res = await fetch(fetchUrl, {
+      headers: { Authorization: `Bearer ${xpilotKey}` },
+    });
 
     const data = await res.json();
     console.log("xPilot video status:", res.status, JSON.stringify(data));
