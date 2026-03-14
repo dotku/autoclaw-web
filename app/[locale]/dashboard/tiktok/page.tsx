@@ -99,7 +99,7 @@ export default function TikTokPage() {
         </div>
 
         {/* Sandbox Notice */}
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 text-yellow-200 text-sm">
+        <div className="bg-yellow-600/20 border border-yellow-500 rounded-lg p-4 text-yellow-100 text-sm font-medium">
           {t.sandboxNotice}
         </div>
 
