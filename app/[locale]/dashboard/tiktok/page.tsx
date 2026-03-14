@@ -38,7 +38,7 @@ export default function TikTokPage() {
 
   // Video generation state
   const [genPrompt, setGenPrompt] = useState("");
-  const [genDuration, setGenDuration] = useState("4");
+  const [genDuration, setGenDuration] = useState("5");
   const [genModel, setGenModel] = useState("wavespeed-ai/wan-2.2/t2v-480p-ultra-fast");
   const [generating, setGenerating] = useState(false);
   const [genVideos, setGenVideos] = useState<GeneratedVideo[]>([]);
@@ -317,9 +317,8 @@ export default function TikTokPage() {
                     onChange={(e) => setGenDuration(e.target.value)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
                   >
-                    <option value="4">4s</option>
+                    <option value="5">5s</option>
                     <option value="8">8s</option>
-                    <option value="12">12s</option>
                   </select>
                 </div>
                 <div className="flex items-end">

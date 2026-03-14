@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { prompt, duration = 4, model = "wavespeed-ai/wan-2.2/t2v-480p-ultra-fast" } = body;
+  const { prompt, duration = 5, model = "wavespeed-ai/wan-2.2/t2v-480p-ultra-fast" } = body;
 
   if (!prompt) {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
@@ -90,7 +90,9 @@ export async function POST(req: NextRequest) {
     console.log("xPilot video generate response:", res.status, JSON.stringify(data));
 
     if (!res.ok) {
-      const errMsg = typeof data.error === "string" ? data.error : (data.error?.message || JSON.stringify(data.error || data));
+      const errMsg = typeof data.error === "string"
+        ? data.error
+        : (data.error?.message || data.message || (Object.keys(data).length > 0 ? JSON.stringify(data) : `xPilot returned ${res.status} with no details`));
       return NextResponse.json({ error: errMsg }, { status: 502 });
     }
 
