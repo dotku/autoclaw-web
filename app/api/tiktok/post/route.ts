@@ -126,10 +126,12 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           post_info: {
             title,
-            privacy_level: privacyLevel,
+            privacy_level: "SELF_ONLY",
             disable_duet: false,
             disable_comment: false,
             disable_stitch: false,
+            brand_content_toggle: false,
+            brand_organic_toggle: false,
           },
           source_info: {
             source: "PULL_FROM_URL",
@@ -140,6 +142,7 @@ export async function POST(req: NextRequest) {
     );
 
     const initData = await initRes.json();
+    console.log("TikTok post response:", initRes.status, JSON.stringify(initData));
 
     if (initData.error?.code) {
       return NextResponse.json(
