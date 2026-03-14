@@ -51,7 +51,7 @@ export default function TikTokPage() {
   const [narrationText, setNarrationText] = useState("");
   const [narrationVoice, setNarrationVoice] = useState("nova");
   const [narrationStyle, setNarrationStyle] = useState("professional");
-  const [bgMusicEnabled, setBgMusicEnabled] = useState(false);
+  const [genAudioEnabled, setGenAudioEnabled] = useState(false);
 
   useEffect(() => {
     fetchStatus();
@@ -168,7 +168,7 @@ export default function TikTokPage() {
           ...(narrationEnabled && narrationText ? {
             narration: { text: narrationText, voice: narrationVoice, style: narrationStyle },
           } : {}),
-          ...(bgMusicEnabled ? { background_music: true } : {}),
+          ...(genAudioEnabled ? { generate_audio: true } : {}),
         }),
       });
       const data = await res.json();
@@ -402,12 +402,12 @@ export default function TikTokPage() {
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={bgMusicEnabled}
-                    onChange={(e) => setBgMusicEnabled(e.target.checked)}
+                    checked={genAudioEnabled}
+                    onChange={(e) => setGenAudioEnabled(e.target.checked)}
                     className="rounded border-gray-300 text-purple-600 focus:ring-purple-500"
                   />
-                  <span className="text-sm font-medium text-gray-700">Add Background Music</span>
-                  <span className="text-xs text-gray-400">(MMAudio V2)</span>
+                  <span className="text-sm font-medium text-gray-700">Generate Audio</span>
+                  <span className="text-xs text-gray-400">(Seedance / Kling / Wan 2.6)</span>
                 </label>
 
                 {narrationEnabled && (

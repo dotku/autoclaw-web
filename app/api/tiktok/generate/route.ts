@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const { prompt, duration = 5, model = "wavespeed-ai/wan-2.2/t2v-480p-ultra-fast", narration, background_music } = body;
+  const { prompt, duration = 5, model = "wavespeed-ai/wan-2.2/t2v-480p-ultra-fast", narration, generate_audio } = body;
 
   if (!prompt) {
     return NextResponse.json({ error: "prompt is required" }, { status: 400 });
@@ -110,9 +110,9 @@ export async function POST(req: NextRequest) {
     };
   }
 
-  // Add background music
-  if (background_music) {
-    generateBody.background_music = true;
+  // Add audio generation (Seedance/Kling models)
+  if (generate_audio) {
+    generateBody.generate_audio = true;
   }
 
   try {
